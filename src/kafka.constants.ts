@@ -1,0 +1,1 @@
+export const KAFKA_CONFIG_TOKEN = 'KAFKA_CONFIG_TOKEN';
