@@ -16,7 +16,7 @@ export interface KafkaMessage<
   value?: T;
 }
 
-export interface KafkaMessagePayload<
+export interface KafkaConsumerPayload<
   T extends Record<string, any> = Record<string, any>,
 > extends Omit<EachMessagePayload, 'message'> {
   message: KafkaMessage<T>;
@@ -26,27 +26,19 @@ export interface KafkaMessagePayload<
   ack: () => Promise<void>;
 }
 
-export type KafkaMessageHandler = (
-  payload: KafkaMessagePayload,
+export type KafkaConsumerHandler = (
+  payload: KafkaConsumerPayload,
 ) => Promise<void>;
 
 export interface KafkaConfig extends IKafkaConfig {
   topicAutoCreate?: boolean;
 }
 
-export interface KafkaAsyncOptions
+export interface KafkaAsyncConfig
   extends Pick<ModuleMetadata, 'imports' | 'providers'> {
   useFactory: (...args: any[]) => KafkaConfig | Promise<KafkaConfig>;
   inject?: any[];
-}
-
-export interface KafkaLogMessage {
-  topic: string;
-  partition: number;
-  offset: string;
-  key: string | undefined;
-  timestamp: string;
-  message?: string;
+  global?: boolean;
 }
 
 export interface KafkaConsumerConfig extends ConsumerConfig {
@@ -54,16 +46,14 @@ export interface KafkaConsumerConfig extends ConsumerConfig {
   autoCommit?: boolean;
 }
 
-export interface KafkaConsumerDecoratorOptions extends ConsumerConfig {
+export interface KafkaConsumerDecoratorConfig extends KafkaConsumerConfig {
   topics: string[];
-  fromBeginning?: boolean;
-  autoCommit?: boolean;
 }
 
-export interface KafkaProducerMessage extends Omit<Message, 'value'> {
+export interface KafkaSendInputMessage extends Omit<Message, 'value'> {
   value: Record<string, any>;
 }
 
-export interface KafkaProducerRecord extends Omit<ProducerRecord, 'messages'> {
-  messages: KafkaProducerMessage | KafkaProducerMessage[];
+export interface KafkaSendInput extends Omit<ProducerRecord, 'messages'> {
+  messages: KafkaSendInputMessage | KafkaSendInputMessage[];
 }

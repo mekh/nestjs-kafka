@@ -12,11 +12,11 @@ export class KafkaAdminService {
 
   public readonly kafka: Kafka;
 
-  private readonly admin: Admin;
+  public readonly admin: Admin;
 
-  private isConnected = false;
+  public isConnected = false;
 
-  private isConnecting = false;
+  public isConnecting = false;
 
   constructor(
     @Inject(KAFKA_CONFIG_TOKEN) private readonly config: KafkaConfig,
@@ -25,7 +25,7 @@ export class KafkaAdminService {
     this.admin = this.kafka.admin();
   }
 
-  public async ensureTopicsExist(topic: string | string[]): Promise<void> {
+  public async ensureTopics(topic: string | string[]): Promise<void> {
     if (!this.config.topicAutoCreate) {
       return;
     }
@@ -88,7 +88,7 @@ export class KafkaAdminService {
   }
 
   private async waitConnection(): Promise<void> {
-    const connectionTimeout = this.config.connectionTimeout || 10000;
+    const connectionTimeout = this.config.connectionTimeout ?? 10000;
     const startTime = Date.now();
 
     while (Date.now() - startTime < connectionTimeout) {

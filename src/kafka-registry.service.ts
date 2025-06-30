@@ -5,11 +5,11 @@ import { ConsumerConfig } from 'kafkajs';
 
 import { ConsumerDecorator } from './kafka.consumer.decorator';
 import { KafkaHandler } from './kafka.handler';
-import { KafkaConsumerDecoratorOptions } from './kafka.interfaces';
+import { KafkaConsumerDecoratorConfig } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type MaybeProvider = InstanceWrapper<object | undefined>;
-type Opts = KafkaConsumerDecoratorOptions;
+type Opts = KafkaConsumerDecoratorConfig;
 
 interface ConsumerMapItem {
   config: ConsumerConfig;
@@ -22,9 +22,9 @@ interface ConsumerMapItem {
 export class KafkaRegistryService implements OnModuleInit {
   private readonly logger = new Logger(KafkaRegistryService.name);
 
-  private handlers = new Map<string, KafkaHandler[]>();
+  public readonly handlers = new Map<string, KafkaHandler[]>();
 
-  public consumers = new Map<string, ConsumerMapItem>();
+  public readonly consumers = new Map<string, ConsumerMapItem>();
 
   constructor(
     private readonly discoveryService: DiscoveryService,
@@ -37,6 +37,10 @@ export class KafkaRegistryService implements OnModuleInit {
 
   public getHandlers(topic: string): KafkaHandler[] | undefined {
     return this.handlers.get(topic);
+  }
+
+  public getConsumers(): ConsumerMapItem[] {
+    return Array.from(this.consumers.values());
   }
 
   onModuleInit(): void {

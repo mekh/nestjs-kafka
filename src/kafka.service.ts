@@ -13,11 +13,19 @@ import { KafkaRegistryService } from './kafka-registry.service';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import {
   KafkaConfig,
-  KafkaLogMessage,
-  KafkaMessagePayload,
-  KafkaProducerMessage,
-  KafkaProducerRecord,
+  KafkaConsumerPayload,
+  KafkaSendInput,
+  KafkaSendInputMessage,
 } from './kafka.interfaces';
+
+interface KafkaLogMessage {
+  topic: string;
+  partition: number;
+  offset: string;
+  key: string | undefined;
+  timestamp: string;
+  message?: string;
+}
 
 @Injectable()
 export class KafkaService {
@@ -27,25 +35,25 @@ export class KafkaService {
 
   protected readonly producer: Producer;
 
-  protected consumers: Consumer[] = [];
+  protected consumers: { consumer: Consumer; groupId: string }[] = [];
 
   constructor(
     @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
-    protected readonly registry: KafkaRegistryService,
-    protected readonly admin: KafkaAdminService,
+    public readonly registry: KafkaRegistryService,
+    public readonly admin: KafkaAdminService,
   ) {
     this.kafka = new Kafka(config);
     this.producer = this.kafka.producer();
   }
 
-  public async init(): Promise<void> {
+  public async connect(): Promise<void> {
     await this.producer.connect();
     await this.admin.connect();
 
-    this.logger.debug('Kafka - producer connected');
+    this.logger.log('Kafka - producer connected');
 
     const topics = this.registry.getTopics();
-    await this.admin.ensureTopicsExist(topics);
+    await this.admin.ensureTopics(topics);
 
     for (
       const {
@@ -53,31 +61,33 @@ export class KafkaService {
         config,
         fromBeginning,
         autoCommit,
-      } of this.registry.consumers.values()
+      } of this.registry.getConsumers()
     ) {
       const consumer = this.kafka.consumer(config);
-      this.consumers.push(consumer);
+      this.consumers.push({ consumer, groupId: config.groupId });
 
-      await this.connect(consumer);
-      await this.subscribe(consumer, topics, fromBeginning);
-      await this.consume(consumer, autoCommit);
+      await this.connectConsumer(consumer, config.groupId);
+      await this.subscribe(consumer, config.groupId, topics, fromBeginning);
+      await this.consume(consumer, config.groupId, autoCommit);
     }
   }
 
-  public async destroy(): Promise<void> {
+  public async disconnect(): Promise<void> {
     await this.producer.disconnect();
     await Promise.all(
-      this.consumers.map((consumer) => this.disconnect(consumer)),
+      this.consumers.map((consumer) =>
+        this.disconnectConsumer(consumer.consumer, consumer.groupId)
+      ),
     );
 
     this.consumers = [];
   }
 
-  public async send(data: KafkaProducerRecord): Promise<RecordMetadata[]> {
-    await this.admin.ensureTopicsExist(data.topic);
+  public async send(data: KafkaSendInput): Promise<RecordMetadata[]> {
+    await this.admin.ensureTopics(data.topic);
 
     const messages: Message[] = Array.isArray(data.messages)
-      ? data.messages.map((msg: KafkaProducerMessage) =>
+      ? data.messages.map((msg: KafkaSendInputMessage) =>
         this.createMessage(msg)
       )
       : [this.createMessage(data.messages)];
@@ -86,52 +96,70 @@ export class KafkaService {
   }
 
   public async ensureTopics(topic: string | string[]): Promise<void> {
-    await this.admin.ensureTopicsExist(topic);
+    await this.admin.ensureTopics(topic);
   }
 
   protected async subscribe(
     consumer: Consumer,
+    groupId: string,
     topics: string[],
     fromBeginning?: boolean,
   ): Promise<void> {
     await consumer.subscribe({ topics, fromBeginning });
 
-    this.logger.debug('Kafka - subscribed to topics: %s', topics.join(','));
+    this.logger.log(
+      'Kafka - consumer %s subscribed to topics: %s',
+      groupId,
+      topics.join(','),
+    );
   }
 
-  protected createMessage(data: KafkaProducerMessage): Message {
+  protected createMessage(data: KafkaSendInputMessage): Message {
     return {
       ...data,
       value: JSON.stringify(data.value),
     };
   }
 
-  protected async connect(consumer: Consumer): Promise<void> {
+  protected async connectConsumer(
+    consumer: Consumer,
+    groupId: string,
+  ): Promise<void> {
     await consumer.connect();
 
-    this.logger.debug('Kafka - consumer connected');
+    this.logger.log('Kafka - consumer connected: %s', groupId);
   }
 
-  protected async disconnect(consumer: Consumer): Promise<void> {
+  protected async disconnectConsumer(
+    consumer: Consumer,
+    groupId: string,
+  ): Promise<void> {
     await consumer
       .disconnect()
-      .then(() => this.logger.debug('Kafka - consumer disconnected'))
-      .catch((err) => this.onError(err, 'Kafka - error disconnecting'));
+      .then(() => this.logger.log('Kafka - consumer disconnected: %s', groupId))
+      .catch((err) =>
+        this.onError(err, `Kafka - error disconnecting consumer: ${groupId}`)
+      );
   }
 
   protected async consume(
     consumer: Consumer,
+    groupId: string,
     autoCommit: boolean,
   ): Promise<void> {
     await consumer.run({
       autoCommit,
       eachMessage: (payload: EachMessagePayload) =>
         this.handleMessage(payload, !autoCommit ? consumer : undefined).catch(
-          (err) => this.onError(err, 'Kafka - error handling message'),
+          (err) =>
+            this.onError(
+              err,
+              `Kafka - error handling message in consumer ${groupId}`,
+            ),
         ),
     });
 
-    this.logger.debug('Kafka - kafka consumer started');
+    this.logger.log('Kafka - kafka consumer started %s', groupId);
   }
 
   protected async handleMessage(
@@ -204,7 +232,7 @@ export class KafkaService {
     return parsedMessage;
   }
 
-  protected async handle(payload: KafkaMessagePayload): Promise<void> {
+  protected async handle(payload: KafkaConsumerPayload): Promise<void> {
     const handlers = this.registry.getHandlers(payload.topic);
     if (!handlers?.length) {
       return;

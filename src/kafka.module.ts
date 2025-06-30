@@ -6,7 +6,7 @@ import { KafkaRegistryService } from './kafka-registry.service';
 import { KafkaDefaultConfig } from './kafka.config';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import {
-  KafkaAsyncOptions,
+  KafkaAsyncConfig,
   KafkaConfig as IKafkaConfig,
 } from './kafka.interfaces';
 import { KafkaService } from './kafka.service';
@@ -51,15 +51,17 @@ export class KafkaModule {
     };
   }
 
-  public static forRootAsync(options: KafkaAsyncOptions): DynamicModule {
+  public static forRootAsync(options: KafkaAsyncConfig): DynamicModule {
     return {
       module: KafkaModule,
+      global: options.global,
       imports: options.imports ?? [],
       providers: [
+        ...options.providers ?? [],
         {
           provide: KAFKA_CONFIG_TOKEN,
-          useFactory: options.useFactory,
           inject: options.inject ?? [],
+          useFactory: options.useFactory,
         },
         KafkaAdminService,
         KafkaRegistryService,

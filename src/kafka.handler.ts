@@ -1,7 +1,7 @@
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { ConsumerConfig } from 'kafkajs';
 
-import { KafkaMessageHandler } from './kafka.interfaces';
+import { KafkaConsumerHandler } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 
@@ -28,9 +28,9 @@ export class KafkaHandler {
     return `${this.providerName}.${this.methodName}`;
   }
 
-  get handle(): KafkaMessageHandler {
+  get handle(): KafkaConsumerHandler {
     const method = this.methodName as keyof typeof this.provider.instance;
-    const handle: KafkaMessageHandler = this.provider.instance[method];
+    const handle: KafkaConsumerHandler = this.provider.instance[method];
 
     return handle.bind(this.provider.instance);
   }

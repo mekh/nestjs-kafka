@@ -3,19 +3,16 @@ import { DiscoveryService } from '@nestjs/core';
 
 import {
   KafkaConsumerConfig,
-  KafkaConsumerDecoratorOptions,
+  KafkaConsumerDecoratorConfig,
 } from './kafka.interfaces';
 
 /**
  * For internal usage only (within the Kafka module)
  */
 export const ConsumerDecorator = DiscoveryService.createDecorator<
-  KafkaConsumerDecoratorOptions
+  KafkaConsumerDecoratorConfig
 >();
 
-/**
- * For usage outside this module
- */
 export const KafkaConsumer = (
   topic: string | string[],
   config: KafkaConsumerConfig,

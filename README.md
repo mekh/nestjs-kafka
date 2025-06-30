@@ -16,12 +16,13 @@ A powerful and easy-to-use Kafka integration for NestJS applications.
   - [Sending Messages](#sending-messages)
   - [Ensuring Topics Exist](#ensuring-topics-exist)
 - [Topic Auto-Creation](#topic-auto-creation)
+- [Serialization/Deserialization](#serializationdeserialization)
 - [License](#license)
 
 ## Installation
 
 ```bash
-npm install @toxicoder/nestjs-kafka kafkajs
+npm install @toxicoder/nestjs-kafka
 ```
 
 ## Overview
@@ -80,7 +81,12 @@ export class AppModule {}
 
 ### forRootAsync
 
-Use `forRootAsync` for dynamic configuration, such as loading from a configuration service:
+Use `forRootAsync` for dynamic configuration, such as loading from a configuration service.
+
+You can set the `global` parameter to `true` to make the module global.
+When a module is global, you don't need to import it in other modules
+to use its providers. This is useful when you want to use the KafkaService
+across multiple modules without having to import the KafkaModule in each one.
 
 ```typescript
 import { Module } from '@nestjs/common';
@@ -93,6 +99,7 @@ import { KafkaModule } from '@toxicoder/nestjs-kafka';
     KafkaModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
+      global: true, // Makes the module global so you don't need to import it in other modules
       useFactory: (configService: ConfigService) => ({
         brokers: configService.get<string>('KAFKA_BROKERS').split(','),
         clientId: configService.get<string>('KAFKA_CLIENT_ID'),
@@ -113,7 +120,8 @@ export class AppModule {}
 
 ### KafkaService
 
-The `KafkaService` provides methods for interacting with Kafka. You need to initialize it in your service's `onModuleInit` method and clean up in `onModuleDestroy`:
+The `KafkaService` provides methods for interacting with Kafka. You need to initialize it
+in your service's `onModuleInit` method and clean up in `onModuleDestroy`:
 
 ```typescript
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
@@ -125,12 +133,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     // Initialize Kafka connections
-    await this.kafkaService.init();
+    await this.kafkaService.connect();
   }
 
   async onModuleDestroy() {
     // Clean up Kafka connections
-    await this.kafkaService.destroy();
+    await this.kafkaService.disconnect();
   }
 }
 ```
@@ -143,12 +151,12 @@ Use the `@KafkaConsumer` decorator to mark methods as Kafka message handlers:
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { KafkaConsumer, KafkaMessagePayload } from '@toxicoder/nestjs-kafka';
+import { KafkaConsumer, KafkaConsumerPayload } from '@toxicoder/nestjs-kafka';
 
 @Injectable()
 export class UserService {
   @KafkaConsumer('user-created', { groupId: 'user-service' })
-  async handleUserCreated(payload: KafkaMessagePayload) {
+  async handleUserCreated(payload: KafkaConsumerPayload) {
     const user = payload.message.value;
     console.log(`User created: ${user.name}`);
   }
@@ -159,7 +167,7 @@ export class UserService {
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { KafkaConsumer, KafkaMessagePayload } from '@toxicoder/nestjs-kafka';
+import { KafkaConsumer, KafkaConsumerPayload } from '@toxicoder/nestjs-kafka';
 
 @Injectable()
 export class NotificationService {
@@ -173,7 +181,7 @@ export class NotificationService {
       heartbeatInterval: 3000,
     },
   )
-  async handleUserEvents(payload: KafkaMessagePayload) {
+  async handleUserEvents(payload: KafkaConsumerPayload) {
     try {
       const user = payload.message.value;
       console.log(`Processing user event for: ${user.name}`);
@@ -288,6 +296,61 @@ Or via environment variable:
 ```
 KAFKA_TOPIC_AUTO_CREATE=true
 ```
+
+## Serialization/Deserialization
+
+This module automatically handles JSON serialization and deserialization of Kafka messages:
+
+### Serialization
+
+When sending messages to Kafka using the `send` method:
+
+- The `value` field of each message is automatically serialized using `JSON.stringify`
+- All other message properties (key, headers, etc.) remain unchanged
+- This happens in the `createMessage` method of the `KafkaService`
+
+```typescript
+// Your original object
+const user = { id: '123', name: 'John Doe', email: 'john@example.com' };
+
+// When you send it:
+await kafkaService.send({
+  topic: 'user-created',
+  messages: {
+    key: user.id,
+    value: user, // This object is automatically serialized to JSON string
+  },
+});
+
+// What actually gets sent to Kafka:
+// key: '123'
+// value: '{"id":"123","name":"John Doe","email":"john@example.com"}'
+```
+
+### Deserialization
+
+When consuming messages from Kafka:
+
+- The message value is automatically parsed using `JSON.parse`
+- If parsing fails, the original string value is preserved
+- The parsed object replaces the original string value in the message
+
+```typescript
+// What comes from Kafka:
+// key: '123'
+// value: '{"id":"123","name":"John Doe","email":"john@example.com"}'
+
+// In your consumer handler:
+@KafkaConsumer('user-created', { groupId: 'user-service' })
+async handleUserCreated(payload: KafkaConsumerPayload) {
+  const user = payload.message.value;
+  // user is already a parsed object: { id: '123', name: 'John Doe', email: 'john@example.com' }
+  console.log(`User created: ${user.name}`);
+}
+```
+
+This automatic serialization/deserialization allows you to work directly with JavaScript objects
+without having to manually handle JSON conversion in your application code.
 
 ## License
 
