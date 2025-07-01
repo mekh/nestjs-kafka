@@ -1,7 +1,8 @@
-import { KafkaConfig as IKafkaConfig, KafkaLogLevel } from './kafka.interfaces';
+import { KafkaLogLevel } from './kafka.enums';
+import { KafkaConfig } from './kafka.interfaces';
 
 export class KafkaDefaultConfig {
-  public static getConfig(): IKafkaConfig {
+  public static getConfig(): KafkaConfig {
     return new KafkaDefaultConfig().getConfig();
   }
 
@@ -26,7 +27,7 @@ export class KafkaDefaultConfig {
 
   public readonly logLevel = this.asString('KAFKA_LOG_LEVEL') ?? 'error';
 
-  public getConfig(): IKafkaConfig {
+  public getConfig(): KafkaConfig {
     return {
       brokers: this.brokers,
       clientId: this.clientId,

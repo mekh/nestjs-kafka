@@ -1,22 +1,18 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import { ConsumerConfig } from 'kafkajs';
 
+import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.consumer.decorator';
 import { KafkaHandler } from './kafka.handler';
-import { KafkaConsumerDecoratorConfig } from './kafka.interfaces';
+import {
+  ConsumerConfig,
+  KafkaConsumerDecoratorConfig,
+} from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type MaybeProvider = InstanceWrapper<object | undefined>;
 type Opts = KafkaConsumerDecoratorConfig;
-
-interface ConsumerMapItem {
-  config: ConsumerConfig;
-  topics: string[];
-  fromBeginning: boolean;
-  autoCommit: boolean;
-}
 
 @Injectable()
 export class KafkaRegistryService implements OnModuleInit {
@@ -24,7 +20,7 @@ export class KafkaRegistryService implements OnModuleInit {
 
   public readonly handlers = new Map<string, KafkaHandler[]>();
 
-  public readonly consumers = new Map<string, ConsumerMapItem>();
+  public readonly consumers = new Map<string, KafkaConsumer>();
 
   constructor(
     private readonly discoveryService: DiscoveryService,
@@ -39,7 +35,7 @@ export class KafkaRegistryService implements OnModuleInit {
     return this.handlers.get(topic);
   }
 
-  public getConsumers(): ConsumerMapItem[] {
+  public getConsumers(): KafkaConsumer[] {
     return Array.from(this.consumers.values());
   }
 
@@ -101,16 +97,17 @@ export class KafkaRegistryService implements OnModuleInit {
     );
   }
 
-  private registerConsumer(data: ConsumerMapItem): void {
+  private registerConsumer(data: ConsumerCreateInput): void {
     const { config, topics, fromBeginning, autoCommit } = data;
-    const consumer = this.consumers.get(config.groupId) ?? {
-      topics: [],
-      config,
-      fromBeginning,
-      autoCommit,
-    };
+    const consumer = this.consumers.get(config.groupId) ??
+      KafkaConsumer.create({
+        topics: [],
+        config,
+        fromBeginning,
+        autoCommit,
+      });
 
-    consumer.topics = [...new Set([...consumer.topics, ...topics])];
+    consumer.addTopics(topics);
 
     this.consumers.set(config.groupId, consumer);
   }

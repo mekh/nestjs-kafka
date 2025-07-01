@@ -8,7 +8,9 @@ import {
   ProducerRecord,
 } from 'kafkajs';
 
-export { logLevel as KafkaLogLevel } from 'kafkajs';
+import { KafkaLogLevel } from './kafka.enums';
+
+export { ConsumerConfig } from 'kafkajs';
 
 export interface KafkaMessage<
   T extends Record<string, any> = Record<string, any>,
@@ -31,6 +33,7 @@ export type KafkaConsumerHandler = (
 ) => Promise<void>;
 
 export interface KafkaConfig extends IKafkaConfig {
+  logLevel?: KafkaLogLevel;
   topicAutoCreate?: boolean;
 }
 

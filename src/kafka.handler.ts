@@ -1,7 +1,6 @@
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import { ConsumerConfig } from 'kafkajs';
 
-import { KafkaConsumerHandler } from './kafka.interfaces';
+import { ConsumerConfig, KafkaConsumerHandler } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 
