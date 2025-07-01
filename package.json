@@ -4,6 +4,7 @@
   "description": "Kafka module for NestJS",
   "author": "toxicoder",
   "main": "dist/index.js",
+  "types": "dist/index.d.js",
   "license": "ISC",
   "keywords": [
     "kafka",
@@ -12,8 +13,7 @@
     "nestjs"
   ],
   "scripts": {
-    "build": "tsc",
-    "prepare": "npm run build"
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "kafkajs": "^2.2.4"

@@ -38,6 +38,7 @@ export class KafkaModule {
   public static forRoot(config: IKafkaConfig): DynamicModule {
     return {
       module: KafkaModule,
+      imports: [DiscoveryModule],
       providers: [
         {
           provide: KAFKA_CONFIG_TOKEN,
@@ -52,10 +53,15 @@ export class KafkaModule {
   }
 
   public static forRootAsync(options: KafkaAsyncConfig): DynamicModule {
+    const imports = options.imports ?? [];
+    if (!imports.includes(DiscoveryModule)) {
+      imports.push(DiscoveryModule);
+    }
+
     return {
       module: KafkaModule,
       global: options.global,
-      imports: options.imports ?? [],
+      imports,
       providers: [
         ...options.providers ?? [],
         {
