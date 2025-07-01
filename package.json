@@ -1,10 +1,9 @@
 {
   "name": "@toxicoder/nestjs-kafka",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Kafka module for NestJS",
   "author": "toxicoder",
   "main": "dist/index.js",
-  "types": "dist/index.d.js",
   "license": "ISC",
   "keywords": [
     "kafka",
