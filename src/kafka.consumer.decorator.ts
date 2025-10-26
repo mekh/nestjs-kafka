@@ -15,7 +15,7 @@ export const ConsumerDecorator = DiscoveryService.createDecorator<
 
 export const KafkaConsumer = (
   topic: string | string[],
-  config: KafkaConsumerConfig,
+  config?: KafkaConsumerConfig,
 ): MethodDecorator => {
   const topics = (Array.isArray(topic) ? topic : [topic]).filter(Boolean);
 
