@@ -35,6 +35,7 @@ export type KafkaConsumerHandler = (
 export interface KafkaConfig extends IKafkaConfig {
   logLevel?: KafkaLogLevel;
   topicAutoCreate?: boolean;
+  consumer?: KafkaConsumerConfig;
 }
 
 export interface KafkaAsyncConfig
@@ -44,9 +45,10 @@ export interface KafkaAsyncConfig
   global?: boolean;
 }
 
-export interface KafkaConsumerConfig extends ConsumerConfig {
+export interface KafkaConsumerConfig extends Omit<ConsumerConfig, 'groupId'> {
   fromBeginning?: boolean;
   autoCommit?: boolean;
+  groupId?: string;
 }
 
 export interface KafkaConsumerDecoratorConfig extends KafkaConsumerConfig {

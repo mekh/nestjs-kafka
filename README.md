@@ -17,6 +17,10 @@ A powerful and easy-to-use Kafka integration for NestJS applications.
   - [Ensuring Topics Exist](#ensuring-topics-exist)
 - [Topic Auto-Creation](#topic-auto-creation)
 - [Serialization/Deserialization](#serializationdeserialization)
+- [Consumer Configuration](#consumer-configuration)
+  - [Default consumer config at module level](#default-consumer-config-at-module-level)
+  - [Decorator precedence](#decorator-precedence)
+  - [IMPORTANT: groupId requirement](#important-groupid-requirement)
 - [License](#license)
 
 ## Installation
@@ -39,18 +43,19 @@ This module helps you:
 
 ## Environment Variables
 
-| Variable                 | Type     | Default            | Description                                             |
-| ------------------------ | -------- | ------------------ | ------------------------------------------------------- |
-| KAFKA_BROKER             | string[] | ['localhost:9092'] | Comma-separated list of Kafka brokers                   |
-| KAFKA_CLIENT_ID          | string   | undefined          | Client ID for Kafka                                     |
-| KAFKA_RETRY_COUNT        | number   | undefined          | Number of retries for Kafka operations                  |
-| KAFKA_RETRY_DELAY        | number   | undefined          | Initial retry delay in milliseconds                     |
-| KAFKA_RETRY_TIMEOUT      | number   | undefined          | Maximum retry time in milliseconds                      |
-| KAFKA_ENFORCE_TIMEOUT    | boolean  | undefined          | Whether to enforce request timeout                      |
-| KAFKA_CONNECTION_TIMEOUT | number   | undefined          | Connection timeout in milliseconds                      |
-| KAFKA_REQUEST_TIMEOUT    | number   | undefined          | Request timeout in milliseconds                         |
-| KAFKA_TOPIC_AUTO_CREATE  | boolean  | false              | Whether to auto-create topics                           |
-| KAFKA_LOG_LEVEL          | string   | 'error'            | Log level ('nothing', 'error', 'warn', 'info', 'debug') |
+| Variable                 | Type     | Default            | Description                                                              |
+| ------------------------ | -------- | ------------------ | ------------------------------------------------------------------------ |
+| KAFKA_BROKER             | string[] | ['localhost:9092'] | Comma-separated list of Kafka brokers                                    |
+| KAFKA_CLIENT_ID          | string   | undefined          | Client ID for Kafka                                                      |
+| KAFKA_GROUP_ID           | string   | undefined          | Default consumer groupId (module-level); can be overridden per-decorator |
+| KAFKA_RETRY_COUNT        | number   | undefined          | Number of retries for Kafka operations                                   |
+| KAFKA_RETRY_DELAY        | number   | undefined          | Initial retry delay in milliseconds                                      |
+| KAFKA_RETRY_TIMEOUT      | number   | undefined          | Maximum retry time in milliseconds                                       |
+| KAFKA_ENFORCE_TIMEOUT    | boolean  | undefined          | Whether to enforce request timeout                                       |
+| KAFKA_CONNECTION_TIMEOUT | number   | undefined          | Connection timeout in milliseconds                                       |
+| KAFKA_REQUEST_TIMEOUT    | number   | undefined          | Request timeout in milliseconds                                          |
+| KAFKA_TOPIC_AUTO_CREATE  | boolean  | false              | Whether to auto-create topics                                            |
+| KAFKA_LOG_LEVEL          | string   | 'error'            | Log level ('nothing', 'error', 'warn', 'info', 'debug')                  |
 
 ## Configuration
 
@@ -72,6 +77,12 @@ import { KafkaModule } from '@toxicoder/nestjs-kafka';
         retries: 3,
         initialRetryTime: 300,
         maxRetryTime: 30000,
+      },
+      // Default consumer configuration at module level
+      consumer: {
+        groupId: 'my-app-group',
+        // you can also set other kafkajs consumer options here as defaults
+        sessionTimeout: 30000,
       },
     }),
   ],
@@ -108,6 +119,10 @@ import { KafkaModule } from '@toxicoder/nestjs-kafka';
           retries: configService.get<number>('KAFKA_RETRY_COUNT'),
           initialRetryTime: configService.get<number>('KAFKA_RETRY_DELAY'),
           maxRetryTime: configService.get<number>('KAFKA_RETRY_TIMEOUT'),
+        },
+        // Default consumer configuration at module level (can be overridden by decorator)
+        consumer: {
+          groupId: configService.get<string>('KAFKA_GROUP_ID'),
         },
       }),
     }),
@@ -336,21 +351,109 @@ When consuming messages from Kafka:
 - The parsed object replaces the original string value in the message
 
 ```typescript
+import { Injectable } from '@nestjs/common';
+import { KafkaConsumer, KafkaConsumerPayload } from '@toxicoder/nestjs-kafka';
+
 // What comes from Kafka:
 // key: '123'
 // value: '{"id":"123","name":"John Doe","email":"john@example.com"}'
 
-// In your consumer handler:
-@KafkaConsumer('user-created', { groupId: 'user-service' })
-async handleUserCreated(payload: KafkaConsumerPayload) {
-  const user = payload.message.value;
-  // user is already a parsed object: { id: '123', name: 'John Doe', email: 'john@example.com' }
-  console.log(`User created: ${user.name}`);
+@Injectable()
+export class UserConsumer {
+  @KafkaConsumer('user-created', { groupId: 'user-service' })
+  async handleUserCreated(payload: KafkaConsumerPayload) {
+    const user = payload.message.value;
+    // user is already a parsed object: { id: '123', name: 'John Doe', email: 'john@example.com' }
+    console.log(`User created: ${user.name}`);
+  }
 }
 ```
 
 This automatic serialization/deserialization allows you to work directly with JavaScript objects
 without having to manually handle JSON conversion in your application code.
+
+## Consumer Configuration
+
+### Default consumer config at module level
+
+You can define a default consumer configuration at the module level via the `consumer` field
+in `KafkaModule.forRoot` / `forRootAsync`. This is useful to set a default `groupId`(and other `kafkajs` consumer options)
+that will be used by all consumers unless overridden per-decorator.
+
+Example (static config):
+
+```typescript
+KafkaModule.forRoot({
+  brokers: ['localhost:9092'],
+  clientId: 'my-app',
+  consumer: {
+    groupId: 'my-default-group',
+    // any kafkajs ConsumerConfig options can go here as defaults
+    sessionTimeout: 30000,
+  },
+});
+```
+
+Example (async config + environment):
+
+```typescript
+KafkaModule.forRootAsync({
+  useFactory: () => ({
+    brokers: process.env.KAFKA_BROKER?.split(',') ?? ['localhost:9092'],
+    clientId: process.env.KAFKA_CLIENT_ID,
+    consumer: {
+      // Default group for all consumers (can be overridden per-decorator)
+      groupId: process.env.KAFKA_GROUP_ID,
+    },
+  }),
+});
+```
+
+### Decorator precedence
+
+Configuration provided directly in the `@KafkaConsumer` decorator has higher priority than the module-level `consumer`
+defaults. That means any property defined in the decorator(e.g., `groupId`, `fromBeginning`, `autoCommit`, or any other
+`ConsumerConfig` option) will override the corresponding module-level default.
+
+```typescript
+@Injectable()
+export class OrdersConsumer {
+  // Module default: groupId = 'my-default-group'
+  // Decorator overrides it to 'orders-service'
+  @KafkaConsumer('orders.created', {
+    groupId: 'orders-service',
+    fromBeginning: true,
+  })
+  async onOrderCreated(payload: KafkaConsumerPayload) {
+    // ...
+  }
+}
+```
+
+### IMPORTANT: groupId requirement
+
+IMPORTANT: A `groupId` must be provided either at the module level (`consumer.groupId`)
+or per-decorator (`@KafkaConsumer(..., { groupId: '...' })`). If a `groupId` is not provided by either,
+the application will throw an error during initialization.
+
+Common ways to satisfy this requirement:
+
+- Set the default via environment variables:
+  - `KAFKA_GROUP_ID=my-app-group`
+- Provide `consumer.groupId` in module configuration
+- Provide `groupId` per-decorator where needed
+
+Example with only per-decorator groupId (no module default):
+
+```typescript
+@Injectable()
+export class BillingConsumer {
+  @KafkaConsumer('billing.paid', { groupId: 'billing-service' })
+  async onPaid(payload: KafkaConsumerPayload) {
+    // ...
+  }
+}
+```
 
 ## License
 

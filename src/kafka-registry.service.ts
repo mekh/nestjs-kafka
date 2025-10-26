@@ -1,12 +1,15 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
+import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 
 import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.consumer.decorator';
 import { KafkaHandler } from './kafka.handler';
 import {
   ConsumerConfig,
+  KafkaConfig,
+  KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
 } from './kafka.interfaces';
 
@@ -22,10 +25,19 @@ export class KafkaRegistryService implements OnModuleInit {
 
   public readonly consumers = new Map<string, KafkaConsumer>();
 
+  private readonly defaultConsumerConfig?: KafkaConsumerConfig;
+
   constructor(
+    @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
     private readonly discoveryService: DiscoveryService,
     private readonly metadataScanner: MetadataScanner,
-  ) {}
+  ) {
+    this.defaultConsumerConfig = config.consumer;
+  }
+
+  onModuleInit(): void {
+    this.scanAndRegister();
+  }
 
   public getTopics(): string[] {
     return Array.from(this.handlers.keys());
@@ -37,10 +49,6 @@ export class KafkaRegistryService implements OnModuleInit {
 
   public getConsumers(): KafkaConsumer[] {
     return Array.from(this.consumers.values());
-  }
-
-  onModuleInit(): void {
-    this.scanAndRegister();
   }
 
   private scanAndRegister(): void {
@@ -76,16 +84,18 @@ export class KafkaRegistryService implements OnModuleInit {
       return;
     }
 
-    const { topics, fromBeginning, autoCommit, ...consumerConfig } = meta;
+    const config = this.composeConfig(meta);
+    const { topics, fromBeginning, autoCommit } = meta;
+
     this.registerConsumer({
-      config: consumerConfig,
+      config,
       topics,
       fromBeginning: fromBeginning ?? false,
       autoCommit: autoCommit ?? true,
     });
 
     topics.forEach((topic) => {
-      this.registerHandler(topic, consumerConfig, provider, method);
+      this.registerHandler(topic, config, provider, method);
     });
   }
 
@@ -130,5 +140,31 @@ export class KafkaRegistryService implements OnModuleInit {
     );
 
     this.handlers.set(topic, handlers);
+  }
+
+  private composeConfig(meta: Opts): ConsumerConfig {
+    const { topics, fromBeginning, autoCommit, ...consumerConfig } = meta;
+
+    const config = { ...this.defaultConsumerConfig, ...consumerConfig };
+    if (!this.isConsumerConfig(config)) {
+      throw new Error('Invalid consumer configuration');
+    }
+
+    return config;
+  }
+
+  private isConsumerConfig(
+    config: KafkaConsumerConfig,
+  ): config is ConsumerConfig {
+    if (!config.groupId) {
+      this.logger.error(
+        // eslint-disable-next-line max-len
+        'The groupId was not provided either in the module config or in the decorator.',
+      );
+
+      return false;
+    }
+
+    return true;
   }
 }
