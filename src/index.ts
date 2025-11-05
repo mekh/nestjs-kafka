@@ -1,8 +1,15 @@
 export { KafkaDefaultConfig } from './kafka.config';
-export { Headers, KafkaConsumer, Key, Value } from './kafka.decorators';
+export {
+  Headers,
+  KafkaBatchConsumer,
+  KafkaConsumer,
+  Key,
+  Value,
+} from './kafka.decorators';
 export { KafkaLogLevel } from './kafka.enums';
 export {
   KafkaAsyncConfig,
+  KafkaBatchPayload,
   KafkaConfig,
   KafkaConsumerConfig,
   KafkaConsumerHandler,

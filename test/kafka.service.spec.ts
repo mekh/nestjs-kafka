@@ -111,7 +111,7 @@ describe('KafkaService', () => {
       },
     };
 
-    const parsed = (s as any).parseMessage(payload);
+    const parsed = (s as any).parseMessage(payload.message.value);
     expect(parsed).toEqual({ a: 1 });
 
     const fmt = (s as any).formatLogMessage(payload);

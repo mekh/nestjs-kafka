@@ -13,10 +13,13 @@ A powerful and easy-to-use Kafka integration for NestJS applications.
 - [Usage](#usage)
   - [KafkaService](#kafkaservice)
   - [KafkaConsumer Decorator](#kafkaconsumer-decorator)
+    - [Parameter Decorators: Value, Headers, Key](#parameter-decorators-value-headers-key)
+    - [Batch Mode](#batch-mode)
   - [Sending Messages](#sending-messages)
   - [Ensuring Topics Exist](#ensuring-topics-exist)
 - [Topic Auto-Creation](#topic-auto-creation)
 - [Serialization/Deserialization](#serializationdeserialization)
+  - [Key and Headers normalization](#key-and-headers-normalization)
 - [Consumer Configuration](#consumer-configuration)
   - [Default consumer config at module level](#default-consumer-config-at-module-level)
   - [Decorator precedence](#decorator-precedence)
@@ -213,6 +216,122 @@ export class NotificationService {
 }
 ```
 
+#### Parameter Decorators: Value, Headers, Key
+
+These parameter decorators allow you to extract parts of the Kafka message directly into your handler parameters. You can combine them in any order. If a parameter is not decorated, the full payload object will be passed.
+
+- `@Value()` extracts the parsed message value
+- `@Key()` extracts the message key (always a string if present)
+- `@Headers()` extracts the headers as a plain object with string values
+
+Single-message mode example:
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { Headers, KafkaConsumer, Key, Value } from '@toxicoder/nestjs-kafka';
+
+interface UserCreatedEvent {
+  id: string;
+  name: string;
+}
+
+@Injectable()
+export class UserService {
+  @KafkaConsumer('user-created', { groupId: 'user-service' })
+  async handleUserCreated(
+    @Value() value: UserCreatedEvent, // parsed JSON
+    @Key() key: string | undefined, // coerced to string
+    @Headers() headers: Record<string, string | undefined>,
+  ) {
+    // value: { id: '123', name: 'John' }
+    // key: '123'
+    // headers: { source: 'api', traceId: '...' }
+  }
+}
+```
+
+Notes:
+
+- If you omit all parameter decorators, your method receives the entire `KafkaConsumerPayload` (which also includes `ack()` if `autoCommit` is false)
+- You can mix decorated and non-decorated parameters; undecorated ones receive the full payload
+
+#### Batch Mode
+
+Batch mode lets your handler receive and process a batch of messages at once.
+
+How to enable batch mode:
+
+- Use the `batch: true` option with `@KafkaConsumer`
+- Or use the convenience decorator `@KafkaBatchConsumer` (equivalent to `@KafkaConsumer(..., { batch: true })`)
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import {
+  Headers,
+  KafkaBatchConsumer,
+  KafkaBatchPayload,
+  KafkaConsumer,
+  Key,
+  Value,
+} from '@toxicoder/nestjs-kafka';
+
+@Injectable()
+export class BatchService {
+  // Option 1: via config
+  @KafkaConsumer('user-created', { batch: true })
+  async handleBatch1(payload: KafkaBatchPayload) {
+    // payload.batch.messages is already normalized (see below)
+  }
+
+  // Option 2: shortcut decorator
+  @KafkaBatchConsumer(['user-created', 'user-updated'])
+  async handleBatch2(payload: KafkaBatchPayload) {
+    // ...
+  }
+}
+```
+
+What the handler receives in batch mode (`KafkaBatchPayload`):
+
+- `batch`: contains `topic`, `partition`, `messages`, etc. (`kafkajs` batch with typed/normalized messages)
+- `batch.messages`: an array of messages, where each message is normalized as:
+  - `key?: string` — coerced to string if present
+  - `value?: Record<string, any>` — parsed from JSON when possible
+  - `headers?: Record<string, string | undefined>` — all header values coerced to string
+
+Using parameter decorators in batch mode:
+
+- `@Value()` provides an array of message values: `Record<string, any>[]`
+- `@Key()` provides an array of keys: `(string | undefined)[]`
+- `@Headers()` provides an array of headers objects: `Record<string, string | undefined>[]`
+- Undecorated parameters receive the full `KafkaBatchPayload`
+
+Example with decorators in batch mode:
+
+```typescript
+@Injectable()
+export class BatchServiceWithDecorators {
+  @KafkaBatchConsumer('user-created', { groupId: 'batch-service' })
+  async handle(
+    @Value() values: Record<string, any>[],
+    @Key() keys: (string | undefined)[],
+    @Headers() headers: Record<string, string | undefined>[],
+    payload: KafkaBatchPayload, // optional extra param for full context
+  ) {
+    // values[i], keys[i], and headers[i] correspond to the same message
+    for (let i = 0; i < values.length; i++) {
+      // process values[i] with keys[i] and headers[i]
+    }
+  }
+}
+```
+
+Acknowledgement/offsets in batch mode:
+
+- Manual per-message acknowledgement via `payload.ack()` is only available in single-message mode
+- In batch mode, there is no `ack` function passed to the handler; offset commits follow your consumer configuration (`autoCommit`)
+- If you need fine-grained commit control, prefer single-message mode with `autoCommit: false` and call `payload.ack()` yourself
+
 ### Sending Messages
 
 Use the `send` method to produce messages to Kafka topics:
@@ -371,6 +490,19 @@ export class UserConsumer {
 
 This automatic serialization/deserialization allows you to work directly with JavaScript objects
 without having to manually handle JSON conversion in your application code.
+
+### Key and Headers normalization
+
+In addition to value parsing, the module normalizes `key` and `headers` for convenience:
+
+- Message `key` is automatically coerced to a string (if present) on the consumer side.
+  - Single-message mode: `payload.message.key` is `string | undefined`.
+  - Batch mode: each `batch.messages[i].key` is `string | undefined`.
+- Message `headers` values are automatically coerced to strings (if present) on the consumer side.
+  - Single-message mode: `payload.message.headers` is `Record<string, string | undefined>`.
+  - Batch mode: each `batch.messages[i].headers` is `Record<string, string | undefined>`.
+
+This means your handlers can rely on string types for keys and header values without manual Buffer-to-string conversion.
 
 ## Consumer Configuration
 

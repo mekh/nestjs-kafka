@@ -18,6 +18,7 @@ describe('KafkaConsumer', () => {
     topics: ['t1'],
     fromBeginning: true,
     autoCommit: false,
+    batch: false,
   };
 
   beforeEach(() => {

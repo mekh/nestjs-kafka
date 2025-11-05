@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  EachBatchPayload,
   EachMessagePayload,
   IHeaders,
   Kafka,
+  KafkaMessage as IKafkaMessage,
   Message,
   Producer,
   RecordMetadata,
@@ -13,8 +15,10 @@ import { KafkaRegistryService } from './kafka-registry.service';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import { KafkaConsumer } from './kafka.consumer';
 import {
+  KafkaBatchPayload,
   KafkaConfig,
   KafkaConsumerPayload,
+  KafkaMessage,
   KafkaSendInput,
   KafkaSendInputMessage,
 } from './kafka.interfaces';
@@ -117,24 +121,56 @@ export class KafkaService {
 
     await consumer.run({
       autoCommit,
-      eachMessage: (payload: EachMessagePayload) =>
-        this.handleMessage(payload, consumer).catch(
-          (err) =>
-            this.onError(
-              err,
-              `Kafka - error handling message in consumer ${consumer.groupId}`,
-            ),
-        ),
+      ...consumer.batch
+        ? {
+          eachBatch: (payload: EachBatchPayload): Promise<void> =>
+            this.hangleEachBatch(payload, consumer),
+        }
+        : {
+          eachMessage: (payload: EachMessagePayload): Promise<void> =>
+            this.hangleEachMessage(payload, consumer),
+        },
     });
+  }
+
+  protected async hangleEachMessage(
+    payload: EachMessagePayload,
+    consumer: KafkaConsumer,
+  ): Promise<void> {
+    await this.handleMessage(payload, consumer).catch(
+      (err) =>
+        this.onError(
+          err,
+          `Kafka - error handling message in consumer ${consumer.groupId}`,
+        ),
+    );
+  }
+
+  protected async hangleEachBatch(
+    payload: EachBatchPayload,
+    consumer: KafkaConsumer,
+  ): Promise<void> {
+    const messages = payload.batch.messages.map((message) =>
+      this.formatMessage(message)
+    );
+    const batch = { ...payload.batch, messages };
+
+    this.logger.debug('Kafka - received batch of %d messages', messages.length);
+
+    await this.handle({ ...payload, batch }).catch(
+      (err) =>
+        this.onError(
+          err,
+          `Kafka - error handling batch in consumer ${consumer.groupId}`,
+        ),
+    );
   }
 
   protected async handleMessage(
     payload: EachMessagePayload,
     consumer: KafkaConsumer,
   ): Promise<void> {
-    const value = this.parseMessage(payload.message.value);
-    const headers = this.parseHeaders(payload.message.headers);
-    const key = payload.message.key?.toString();
+    const message = this.formatMessage(payload.message);
     const ack = (): Promise<void> => this.commitOffset(payload, consumer);
 
     this.logger.debug(
@@ -142,11 +178,15 @@ export class KafkaService {
       this.formatLogMessage(payload),
     );
 
-    await this.handle({
-      ...payload,
-      ack,
-      message: { ...payload.message, key, headers, value },
-    });
+    await this.handle({ ...payload, ack, message });
+  }
+
+  protected formatMessage(message: IKafkaMessage): KafkaMessage {
+    const value = this.parseMessage(message.value);
+    const headers = this.parseHeaders(message.headers);
+    const key = message.key?.toString();
+
+    return { ...message, key, headers, value };
   }
 
   protected async commitOffset(
@@ -196,8 +236,11 @@ export class KafkaService {
     );
   }
 
-  protected async handle(payload: KafkaConsumerPayload): Promise<void> {
-    const handlers = this.registry.getHandlers(payload.topic);
+  protected async handle(
+    payload: KafkaConsumerPayload | KafkaBatchPayload,
+  ): Promise<void> {
+    const topic = 'batch' in payload ? payload.batch.topic : payload.topic;
+    const handlers = this.registry.getHandlers(topic);
     if (!handlers?.length) {
       return;
     }
@@ -205,7 +248,8 @@ export class KafkaService {
     await Promise.all(
       handlers.map((handler) =>
         handler
-          .handle(payload)
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+          .handle(payload as any)
           .catch((err) => this.onError(err, 'Kafka - error handling message'))
       ),
     );
@@ -217,6 +261,8 @@ export class KafkaService {
     }
 
     this.logger.error(err);
+
+    throw err;
   }
 
   protected formatLogMessage(payload: EachMessagePayload): KafkaLogMessage {

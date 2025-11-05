@@ -12,6 +12,7 @@ export interface ConsumerCreateInput {
   topics: string[];
   fromBeginning: boolean;
   autoCommit: boolean;
+  batch: boolean;
 }
 
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
@@ -57,6 +58,10 @@ export class KafkaConsumer {
 
   public get autoCommit(): boolean {
     return this.input.autoCommit;
+  }
+
+  public get batch(): boolean {
+    return this.input.batch;
   }
 
   public addTopics(topics: string[]): void {

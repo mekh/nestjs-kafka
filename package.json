@@ -12,7 +12,8 @@
     "nestjs"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "jest"
   },
   "dependencies": {
     "kafkajs": "^2.2.4"

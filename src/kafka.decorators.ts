@@ -7,6 +7,7 @@ import {
   KAFKA_VALUE_META,
 } from './kafka.constants';
 import {
+  KafkaBatchPayload,
   KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
   KafkaConsumerPayload,
@@ -73,17 +74,38 @@ export const KafkaConsumer = (
   ) => {
     const orig: Function = descriptor.value;
 
-    descriptor.value = function(data: KafkaConsumerPayload): unknown {
+    descriptor.value = function(
+      data: KafkaConsumerPayload | KafkaBatchPayload,
+    ): unknown {
       const [keys, values, headers] = [
         Reflect.getOwnMetadata(KAFKA_KEY_META, target, key) ?? [],
         Reflect.getOwnMetadata(KAFKA_VALUE_META, target, key) ?? [],
         Reflect.getOwnMetadata(KAFKA_HEADERS_META, target, key) ?? [],
       ].map((idx: number[]) => new Set<number>(idx));
+      const isBatch = 'batch' in data;
+
+      const getKeys = (): unknown => {
+        return isBatch
+          ? data.batch.messages.map((m) => m.key)
+          : data.message.key;
+      };
+
+      const getValues = (): unknown => {
+        return isBatch
+          ? data.batch.messages.map((m) => m.value)
+          : data.message.value;
+      };
+
+      const getHeaders = (): unknown => {
+        return isBatch
+          ? data.batch.messages.map((m) => m.headers)
+          : data.message.headers;
+      };
 
       const args = Array.from({ length: orig.length }, (_, i) => {
-        if (keys.has(i)) { return data.message.key?.toString(); }
-        if (values.has(i)) { return data.message.value; }
-        if (headers.has(i)) { return data.message.headers; }
+        if (keys.has(i)) { return getKeys(); }
+        if (values.has(i)) { return getValues(); }
+        if (headers.has(i)) { return getHeaders(); }
         return data;
       });
 
@@ -99,3 +121,8 @@ export const KafkaConsumer = (
     copyMeta(orig, descriptor.value as Function);
   };
 };
+
+export const KafkaBatchConsumer = (
+  topic: string | string[],
+  config?: Omit<KafkaConsumerConfig, 'batch'>,
+): MethodDecorator => KafkaConsumer(topic, { ...config, batch: true });

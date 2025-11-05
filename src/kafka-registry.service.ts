@@ -92,6 +92,7 @@ export class KafkaRegistryService implements OnModuleInit {
       topics,
       fromBeginning: fromBeginning ?? false,
       autoCommit: autoCommit ?? true,
+      batch: meta.batch ?? false,
     });
 
     topics.forEach((topic) => {
@@ -108,13 +109,14 @@ export class KafkaRegistryService implements OnModuleInit {
   }
 
   private registerConsumer(data: ConsumerCreateInput): void {
-    const { config, topics, fromBeginning, autoCommit } = data;
+    const { config, topics, fromBeginning, autoCommit, batch } = data;
     const consumer = this.consumers.get(config.groupId) ??
       KafkaConsumer.create({
         topics: [],
         config,
         fromBeginning,
         autoCommit,
+        batch,
       });
 
     consumer.addTopics(topics);

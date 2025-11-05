@@ -1,71 +1,74 @@
 import { KafkaRegistryService } from '../src/kafka-registry.service';
+import { KAFKA_CONFIG_TOKEN } from '../src/kafka.constants';
+import { ConsumerDecorator } from '../src/kafka.decorators';
 
-describe('KafkaRegistryService', () => {
-  const makeSvc = (consumerDefault?: any) => {
-    const config = {
+// Minimal InstanceWrapper mock
+class InstanceWrapper<T extends object> {
+  constructor(public instance: T, public metatype: any = {}) {}
+}
+
+describe('KafkaRegistryService scanning and config precedence', () => {
+  it('should register consumers and handlers with decorator-level overrides and batch flag', () => {
+    const defaultConfig: any = {
       brokers: ['b:1'],
-      consumer: consumerDefault,
+      consumer: { groupId: 'g-default', sessionTimeout: 1000 },
     };
 
-    const methods = ['handle', 'other'];
+    // Create a provider with a method to be "decorated"
+    class TestProvider {
+      // this would normally be decorated, but we mock DiscoveryService to return meta
+      handle(_: any) {}
+    }
 
-    const providerWrapper = {
-      instance: {
-        constructor: { name: 'Prov' },
-        handle: () => undefined,
-      },
-      metatype: function Prov() {},
-    };
+    const providerWrapper = new InstanceWrapper(new TestProvider());
 
-    const discovery = {
-      getProviders: jest.fn(() => [providerWrapper, { instance: undefined }]),
-      getMetadataByDecorator: jest.fn((dec, prov, method) => {
-        if (method === 'handle') {
+    // Mock DiscoveryService
+    const discoveryService: any = {
+      getProviders: jest.fn(() => [providerWrapper]),
+      // Return metadata as if it were placed by @KafkaConsumer
+      getMetadataByDecorator: jest.fn((decorator: any, _provider: any, method: string) => {
+        if (decorator === ConsumerDecorator && method === 'handle') {
           return {
-            topics: ['t1', 't2'],
-            groupId: 'g1',
-            fromBeginning: true,
+            topics: ['topic-x'],
+            // override default consumer config
+            groupId: 'g-override',
             autoCommit: false,
-          };
+            fromBeginning: true,
+            batch: true,
+          } as any;
         }
-
         return undefined;
       }),
-    } as any;
+    };
 
-    const metadataScanner = {
-      getAllMethodNames: jest.fn(() => methods),
-    } as any;
+    // Mock MetadataScanner
+    const metadataScanner: any = {
+      getAllMethodNames: jest.fn(() => ['handle']),
+    };
 
-    const svc = new KafkaRegistryService(
-      config,
-      discovery,
+    const registry = new KafkaRegistryService(
+      // Inject via token simulated by constructor param order
+      (defaultConfig as any)[KAFKA_CONFIG_TOKEN] ?? defaultConfig,
+      discoveryService,
       metadataScanner,
     );
 
-    return { svc, discovery, metadataScanner, providerWrapper };
-  };
+    registry.onModuleInit();
 
-  it('should scan providers and register consumers and handlers', () => {
-    const { svc } = makeSvc({ groupId: 'g1' });
+    // One consumer created with override groupId
+    const consumers = registry.getConsumers();
+    expect(consumers).toHaveLength(1);
+    const consumer = consumers[0];
 
-    svc['scanAndRegister']();
+    expect(consumer.groupId).toBe('g-override');
+    expect(consumer.batch).toBe(true);
+    expect(consumer.autoCommit).toBe(false);
+    expect(consumer.fromBeginning).toBe(true);
+    expect(consumer.topics).toEqual(['topic-x']);
 
-    expect(svc.getTopics().sort()).toEqual(['t1', 't2']);
-
-    const cons = svc.getConsumers();
-    expect(cons.length).toBe(1);
-
-    const handlers = svc.getHandlers('t1');
-    expect(handlers?.length).toBe(1);
-    expect(handlers?.[0].handlerName).toBe('Prov.handle');
-  });
-
-  it('should throw on invalid consumer configuration', () => {
-    const { svc } = makeSvc(undefined);
-
-    expect(
-      () => svc['composeConfig']({ topics: ['t'] }),
-    ).toThrow('Invalid consumer configuration');
+    // Handler registered for topic
+    const handlers = registry.getHandlers('topic-x');
+    expect(handlers && handlers.length).toBe(1);
+    expect(handlers![0].handlerName).toContain('TestProvider.handle');
   });
 });

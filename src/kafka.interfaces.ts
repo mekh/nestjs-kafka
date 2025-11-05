@@ -1,6 +1,8 @@
 import { ModuleMetadata } from '@nestjs/common';
 import {
+  Batch,
   ConsumerConfig,
+  EachBatchPayload,
   EachMessagePayload,
   KafkaConfig as IKafkaConfig,
   KafkaMessage as IKafkaMessage,
@@ -29,8 +31,24 @@ export interface KafkaConsumerPayload<
   ack: () => Promise<void>;
 }
 
+export interface KafkaBatch<
+  T extends Record<string, any> = Record<string, any>,
+> extends Omit<Batch, 'messages'> {
+  messages: KafkaMessage<T>[];
+}
+
+export interface KafkaBatchPayload<
+  T extends Record<string, any> = Record<string, any>,
+> extends Omit<EachBatchPayload, 'batch'> {
+  batch: KafkaBatch<T>;
+}
+
 export type KafkaConsumerHandler = (
   payload: KafkaConsumerPayload,
+) => Promise<void>;
+
+export type KafkaBatchHandler = (
+  payload: KafkaBatchPayload,
 ) => Promise<void>;
 
 export interface KafkaConfig extends IKafkaConfig {
@@ -50,6 +68,7 @@ export interface KafkaConsumerConfig extends Omit<ConsumerConfig, 'groupId'> {
   fromBeginning?: boolean;
   autoCommit?: boolean;
   groupId?: string;
+  batch?: boolean;
 }
 
 export interface KafkaConsumerDecoratorConfig extends KafkaConsumerConfig {
