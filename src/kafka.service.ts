@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   EachMessagePayload,
+  IHeaders,
   Kafka,
   Message,
   Producer,
@@ -131,12 +132,10 @@ export class KafkaService {
     payload: EachMessagePayload,
     consumer: KafkaConsumer,
   ): Promise<void> {
-    const messageValue = this.parseMessage(payload);
+    const value = this.parseMessage(payload.message.value);
+    const headers = this.parseHeaders(payload.message.headers);
+    const key = payload.message.key?.toString();
     const ack = (): Promise<void> => this.commitOffset(payload, consumer);
-
-    if (!messageValue) {
-      return ack();
-    }
 
     this.logger.debug(
       'Kafka - received message: %o',
@@ -146,7 +145,7 @@ export class KafkaService {
     await this.handle({
       ...payload,
       ack,
-      message: { ...payload.message, value: messageValue },
+      message: { ...payload.message, key, headers, value },
     });
   }
 
@@ -166,26 +165,35 @@ export class KafkaService {
   }
 
   protected parseMessage(
-    payload: EachMessagePayload,
+    value: Buffer | null,
   ): Record<string, any> | undefined {
-    const messageValue = payload.message.value?.toString();
-    if (!messageValue) {
-      this.logger.warn(
-        'Kafka - received invalid/empty message: %o',
-        this.formatLogMessage(payload),
-      );
-
+    const str = value?.toString();
+    if (!str) {
       return;
     }
 
-    let parsedMessage: Record<string, any> | undefined;
+    let parsed: Record<string, any> | undefined;
     try {
-      parsedMessage = JSON.parse(messageValue);
+      parsed = JSON.parse(str);
     } catch {
       //
     }
 
-    return parsedMessage;
+    return parsed;
+  }
+
+  protected parseHeaders(
+    headers?: IHeaders,
+  ): Record<string, string | undefined> | undefined {
+    if (!headers) {
+      return;
+    }
+
+    return Object.fromEntries(
+      Object.entries(headers).map((
+        [key, value],
+      ) => [key, value?.toString()]),
+    );
   }
 
   protected async handle(payload: KafkaConsumerPayload): Promise<void> {

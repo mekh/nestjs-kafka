@@ -4,7 +4,7 @@ import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 
 import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
-import { ConsumerDecorator } from './kafka.consumer.decorator';
+import { ConsumerDecorator } from './kafka.decorators';
 import { KafkaHandler } from './kafka.handler';
 import {
   ConsumerConfig,

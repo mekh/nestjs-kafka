@@ -14,7 +14,8 @@ export { ConsumerConfig } from 'kafkajs';
 
 export interface KafkaMessage<
   T extends Record<string, any> = Record<string, any>,
-> extends Omit<IKafkaMessage, 'value'> {
+> extends Omit<IKafkaMessage, 'value' | 'key'> {
+  key?: string;
   value?: T;
 }
 
