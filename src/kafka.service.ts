@@ -2,35 +2,22 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   EachBatchPayload,
   EachMessagePayload,
-  IHeaders,
   Kafka,
-  KafkaMessage as IKafkaMessage,
-  Message,
   Producer,
   RecordMetadata,
 } from 'kafkajs';
-import { KafkaAdminService } from './kafka-admin.service';
 
+import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaRegistryService } from './kafka-registry.service';
+import { KafkaSerdeService } from './kafka-serde.service';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import { KafkaConsumer } from './kafka.consumer';
 import {
   KafkaBatchPayload,
   KafkaConfig,
   KafkaConsumerPayload,
-  KafkaMessage,
   KafkaSendInput,
-  KafkaSendInputMessage,
 } from './kafka.interfaces';
-
-interface KafkaLogMessage {
-  topic: string;
-  partition: number;
-  offset: string;
-  key: string | undefined;
-  timestamp: string;
-  message?: string;
-}
 
 @Injectable()
 export class KafkaService {
@@ -46,6 +33,7 @@ export class KafkaService {
     @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
     public readonly registry: KafkaRegistryService,
     public readonly admin: KafkaAdminService,
+    public readonly serde: KafkaSerdeService,
   ) {
     this.kafka = new Kafka(config);
     this.producer = this.kafka.producer();
@@ -75,8 +63,8 @@ export class KafkaService {
 
   public async disconnect(): Promise<void> {
     await this.producer.disconnect();
-    await Promise.all(
-      this.consumers.map((consumer) => this.disconnectConsumer(consumer)),
+    await Promise.allSettled(
+      this.consumers.map((consumer) => consumer.disconnect()),
     );
 
     this.consumers = [];
@@ -85,35 +73,14 @@ export class KafkaService {
   public async send(data: KafkaSendInput): Promise<RecordMetadata[]> {
     await this.ensureTopics(data.topic);
 
-    const messages: Message[] = Array.isArray(data.messages)
-      ? data.messages.map((msg: KafkaSendInputMessage) =>
-        this.createMessage(msg)
-      )
-      : [this.createMessage(data.messages)];
-
-    return this.producer.send({ topic: data.topic, messages });
+    return this.producer.send({
+      topic: data.topic,
+      messages: this.serde.serialize(data),
+    });
   }
 
   public async ensureTopics(topic: string | string[]): Promise<void> {
     await this.admin.ensureTopics(topic);
-  }
-
-  protected createMessage(data: KafkaSendInputMessage): Message {
-    return {
-      ...data,
-      value: JSON.stringify(data.value),
-    };
-  }
-
-  protected async disconnectConsumer(consumer: KafkaConsumer): Promise<void> {
-    const groupId = consumer.groupId;
-
-    await consumer
-      .disconnect()
-      .then(() => this.logger.log('Kafka - consumer disconnected: %s', groupId))
-      .catch((err) =>
-        this.onError(err, `Kafka - error disconnecting consumer: ${groupId}`)
-      );
   }
 
   protected async consume(consumer: KafkaConsumer): Promise<void> {
@@ -122,71 +89,48 @@ export class KafkaService {
     await consumer.run({
       autoCommit,
       ...consumer.batch
-        ? {
-          eachBatch: (payload: EachBatchPayload): Promise<void> =>
-            this.hangleEachBatch(payload, consumer),
-        }
-        : {
-          eachMessage: (payload: EachMessagePayload): Promise<void> =>
-            this.hangleEachMessage(payload, consumer),
-        },
+        ? { eachBatch: this.hangleEachBatch.bind(this, consumer) }
+        : { eachMessage: this.hangleEachMessage.bind(this, consumer) },
     });
   }
 
-  protected async hangleEachMessage(
-    payload: EachMessagePayload,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
-    await this.handleMessage(payload, consumer).catch(
-      (err) =>
-        this.onError(
-          err,
-          `Kafka - error handling message in consumer ${consumer.groupId}`,
-        ),
-    );
-  }
-
   protected async hangleEachBatch(
-    payload: EachBatchPayload,
     consumer: KafkaConsumer,
+    payload: EachBatchPayload,
   ): Promise<void> {
-    const messages = payload.batch.messages.map((message) =>
-      this.formatMessage(message)
-    );
+    const messages = this.serde.deserialize(payload);
     const batch = { ...payload.batch, messages };
 
     this.logger.debug('Kafka - received batch of %d messages', messages.length);
 
-    await this.handle({ ...payload, batch }).catch(
-      (err) =>
-        this.onError(
-          err,
-          `Kafka - error handling batch in consumer ${consumer.groupId}`,
-        ),
+    await this.handle({ ...payload, batch }).catch((err) =>
+      this.onError(
+        err,
+        `Kafka - error handling batch in consumer ${consumer.groupId}`,
+      )
+    );
+  }
+
+  protected async hangleEachMessage(
+    consumer: KafkaConsumer,
+    payload: EachMessagePayload,
+  ): Promise<void> {
+    await this.handleMessage(consumer, payload).catch((err) =>
+      this.onError(
+        err,
+        `Kafka - error handling message in consumer ${consumer.groupId}`,
+      )
     );
   }
 
   protected async handleMessage(
-    payload: EachMessagePayload,
     consumer: KafkaConsumer,
+    payload: EachMessagePayload,
   ): Promise<void> {
-    const message = this.formatMessage(payload.message);
+    const message = this.serde.deserialize(payload);
     const ack = (): Promise<void> => this.commitOffset(payload, consumer);
 
-    this.logger.debug(
-      'Kafka - received message: %o',
-      this.formatLogMessage(payload),
-    );
-
     await this.handle({ ...payload, ack, message });
-  }
-
-  protected formatMessage(message: IKafkaMessage): KafkaMessage {
-    const value = this.parseMessage(message.value);
-    const headers = this.parseHeaders(message.headers);
-    const key = message.key?.toString();
-
-    return { ...message, key, headers, value };
   }
 
   protected async commitOffset(
@@ -204,38 +148,6 @@ export class KafkaService {
     });
   }
 
-  protected parseMessage(
-    value: Buffer | null,
-  ): Record<string, any> | undefined {
-    const str = value?.toString();
-    if (!str) {
-      return;
-    }
-
-    let parsed: Record<string, any> | undefined;
-    try {
-      parsed = JSON.parse(str);
-    } catch {
-      //
-    }
-
-    return parsed;
-  }
-
-  protected parseHeaders(
-    headers?: IHeaders,
-  ): Record<string, string | undefined> | undefined {
-    if (!headers) {
-      return;
-    }
-
-    return Object.fromEntries(
-      Object.entries(headers).map((
-        [key, value],
-      ) => [key, value?.toString()]),
-    );
-  }
-
   protected async handle(
     payload: KafkaConsumerPayload | KafkaBatchPayload,
   ): Promise<void> {
@@ -245,36 +157,18 @@ export class KafkaService {
       return;
     }
 
-    await Promise.all(
+    await Promise.allSettled(
       handlers.map((handler) =>
         handler
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-          .handle(payload as any)
+          .handle(payload as KafkaConsumerPayload & KafkaBatchPayload)
           .catch((err) => this.onError(err, 'Kafka - error handling message'))
       ),
     );
   }
 
-  protected onError(err: any, message?: string): void {
-    if (message) {
-      this.logger.error(message);
-    }
-
-    this.logger.error(err);
+  protected onError(err: any, message: string): void {
+    this.logger.error(message);
 
     throw err;
-  }
-
-  protected formatLogMessage(payload: EachMessagePayload): KafkaLogMessage {
-    const { topic, partition, message } = payload;
-
-    return {
-      topic,
-      partition,
-      offset: message.offset,
-      key: message.key?.toString(),
-      message: message.value?.toString(),
-      timestamp: message.timestamp,
-    };
   }
 }

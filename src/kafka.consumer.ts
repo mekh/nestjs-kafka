@@ -81,7 +81,17 @@ export class KafkaConsumer {
   }
 
   public async disconnect(): Promise<void> {
-    return this.consumer.disconnect();
+    const groupId = this.groupId;
+
+    return this.consumer
+      .disconnect()
+      .then(() =>
+        this.logger.log('Kafka consumer - disconnected (%s)', groupId)
+      )
+      .catch((err) => {
+        this.logger.error('Kafka consumer - disconnect failed (%s)', groupId);
+        throw err;
+      });
   }
 
   public async run(input: ConsumerRunConfig): Promise<void> {

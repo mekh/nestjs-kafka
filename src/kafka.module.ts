@@ -3,6 +3,7 @@ import { DiscoveryModule } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaRegistryService } from './kafka-registry.service';
+import { KafkaSerdeService } from './kafka-serde.service';
 import { KafkaDefaultConfig } from './kafka.config';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import {
@@ -10,6 +11,19 @@ import {
   KafkaConfig as IKafkaConfig,
 } from './kafka.interfaces';
 import { KafkaService } from './kafka.service';
+
+const providers = [
+  KafkaAdminService,
+  KafkaRegistryService,
+  KafkaService,
+  KafkaSerdeService,
+];
+
+const toExport = [
+  KafkaAdminService,
+  KafkaRegistryService,
+  KafkaService,
+];
 
 @Module({
   imports: [DiscoveryModule],
@@ -28,11 +42,9 @@ import { KafkaService } from './kafka.service';
         };
       },
     },
-    KafkaAdminService,
-    KafkaRegistryService,
-    KafkaService,
+    ...providers,
   ],
-  exports: [KafkaAdminService, KafkaRegistryService, KafkaService],
+  exports: toExport,
 })
 export class KafkaModule {
   public static forRoot(config: IKafkaConfig): DynamicModule {
@@ -44,11 +56,9 @@ export class KafkaModule {
           provide: KAFKA_CONFIG_TOKEN,
           useValue: config,
         },
-        KafkaAdminService,
-        KafkaRegistryService,
-        KafkaService,
+        ...providers,
       ],
-      exports: [KafkaAdminService, KafkaRegistryService, KafkaService],
+      exports: toExport,
     };
   }
 
@@ -69,11 +79,9 @@ export class KafkaModule {
           inject: options.inject ?? [],
           useFactory: options.useFactory,
         },
-        KafkaAdminService,
-        KafkaRegistryService,
-        KafkaService,
+        ...providers,
       ],
-      exports: [KafkaAdminService, KafkaRegistryService, KafkaService],
+      exports: toExport,
     };
   }
 }

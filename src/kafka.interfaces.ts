@@ -76,7 +76,7 @@ export interface KafkaConsumerDecoratorConfig extends KafkaConsumerConfig {
 }
 
 export interface KafkaSendInputMessage extends Omit<Message, 'value'> {
-  value: Record<string, any>;
+  value: Record<string, any> | Buffer | string | null;
 }
 
 export interface KafkaSendInput extends Omit<ProducerRecord, 'messages'> {
