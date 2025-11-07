@@ -46,19 +46,39 @@ This module helps you:
 
 ## Environment Variables
 
-| Variable                 | Type     | Default            | Description                                                              |
-| ------------------------ | -------- | ------------------ | ------------------------------------------------------------------------ |
-| KAFKA_BROKER             | string[] | ['localhost:9092'] | Comma-separated list of Kafka brokers                                    |
-| KAFKA_CLIENT_ID          | string   | undefined          | Client ID for Kafka                                                      |
-| KAFKA_GROUP_ID           | string   | undefined          | Default consumer groupId (module-level); can be overridden per-decorator |
-| KAFKA_RETRY_COUNT        | number   | undefined          | Number of retries for Kafka operations                                   |
-| KAFKA_RETRY_DELAY        | number   | undefined          | Initial retry delay in milliseconds                                      |
-| KAFKA_RETRY_TIMEOUT      | number   | undefined          | Maximum retry time in milliseconds                                       |
-| KAFKA_ENFORCE_TIMEOUT    | boolean  | undefined          | Whether to enforce request timeout                                       |
-| KAFKA_CONNECTION_TIMEOUT | number   | undefined          | Connection timeout in milliseconds                                       |
-| KAFKA_REQUEST_TIMEOUT    | number   | undefined          | Request timeout in milliseconds                                          |
-| KAFKA_TOPIC_AUTO_CREATE  | boolean  | false              | Whether to auto-create topics                                            |
-| KAFKA_LOG_LEVEL          | string   | 'error'            | Log level ('nothing', 'error', 'warn', 'info', 'debug')                  |
+| Variable                               | Type     | Default            | Description                                                                                 |
+|----------------------------------------|----------|--------------------|---------------------------------------------------------------------------------------------|
+| KAFKA_BROKER                           | string[] | ['localhost:9092'] | Comma-separated list of Kafka brokers                                                       |
+| KAFKA_CLIENT_ID                        | string   | undefined          | Client ID for Kafka                                                                         |
+| KAFKA_GROUP_ID                         | string   | undefined          | Default consumer `groupId` (module-level); can be overridden per-decorator                  |
+| KAFKA_ENFORCE_TIMEOUT                  | boolean  | undefined          | Whether to enforce request timeout                                                          |
+| KAFKA_CONNECTION_TIMEOUT               | number   | undefined          | Connection timeout in milliseconds                                                          |
+| KAFKA_REQUEST_TIMEOUT                  | number   | undefined          | Request timeout in milliseconds                                                             |
+| KAFKA_AUTHENTICATION_TIMEOUT           | number   | undefined          | Authentication timeout in milliseconds                                                      |
+| KAFKA_REAUTHENTICATION_THRESHOLD       | number   | undefined          | Minimum time in milliseconds between automatic re-authentication attempts                   |
+| KAFKA_TOPIC_AUTO_CREATE                | boolean  | false              | Whether to auto-create topics                                                               |
+| KAFKA_LOG_LEVEL                        | string   | 'error'            | Log level (`nothing`, `error`, `warn`, `info`, `debug`)                                     |
+| KAFKA_RETRY_COUNT                      | number   | undefined          | Number of retries for Kafka operations                                                      |
+| KAFKA_RETRY_DELAY                      | number   | undefined          | Initial retry delay in milliseconds                                                         |
+| KAFKA_RETRY_TIMEOUT                    | number   | undefined          | Maximum total retry time in milliseconds                                                    |
+| KAFKA_RETRY_FACTOR                     | number   | undefined          | Exponential backoff factor for retries                                                      |
+| KAFKA_RETRY_MULTIPLIER                 | number   | undefined          | Multiplier applied to the retry delay per attempt                                           |
+| KAFKA_CONSUMER_SESSION_TIMEOUT         | number   | undefined          | Consumer session timeout in milliseconds                                                    |
+| KAFKA_CONSUMER_REBALANCE_TIMEOUT       | number   | undefined          | Timeout in milliseconds for rebalancing                                                     |
+| KAFKA_CONSUMER_HEARTBEAT_INTERVAL      | number   | undefined          | Interval in milliseconds for consumer heartbeats                                            |
+| KAFKA_CONSUMER_METADATA_MAX_AGE        | number   | undefined          | How long metadata is considered fresh (ms)                                                  |
+| KAFKA_CONSUMER_MAX_BYTES_PER_PARTITION | number   | undefined          | Maximum bytes per partition to fetch                                                        |
+| KAFKA_CONSUMER_MIN_BYTES               | number   | undefined          | Minimum bytes to accumulate before returning from fetch                                     |
+| KAFKA_CONSUMER_MAX_BYTES               | number   | undefined          | Maximum bytes to accumulate before returning from fetch                                     |
+| KAFKA_CONSUMER_MAX_WAIT_TIME_IN_MS     | number   | undefined          | Maximum wait time in milliseconds for fetch requests                                        |
+| KAFKA_CONSUMER_MAX_IN_FLIGHT_REQUESTS  | number   | undefined          | Maximum number of in-flight requests per connection                                         |
+| KAFKA_CONSUMER_READ_UNCOMMITTED        | boolean  | undefined          | If true, the consumer will read uncommitted messages                                        |
+| KAFKA_CONSUMER_RACK_ID                 | string   | undefined          | Rack identifier for consumer (used for rack-aware partition assignment and fetch selection) |
+
+Notes:
+
+- Boolean variables must be provided as the strings `true` or `false`.
+- Array variables are comma-separated lists without spaces (e.g., `host1:9092,host2:9092`).
 
 ## Configuration
 

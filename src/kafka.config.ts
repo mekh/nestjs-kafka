@@ -16,6 +16,10 @@ export class KafkaDefaultConfig {
 
   public readonly retryDelay = this.asNumber('KAFKA_RETRY_DELAY');
 
+  public readonly retryFactor = this.asNumber('KAFKA_RETRY_FACTOR');
+
+  public readonly retryMultiplier = this.asNumber('KAFKA_RETRY_MULTIPLIER');
+
   public readonly retryTimeout = this.asNumber('KAFKA_RETRY_TIMEOUT');
 
   public readonly enforceTimeout = this.asBoolean('KAFKA_ENFORCE_TIMEOUT');
@@ -24,28 +28,77 @@ export class KafkaDefaultConfig {
 
   public readonly requestTimeout = this.asNumber('KAFKA_REQUEST_TIMEOUT');
 
+  public readonly authenticationTimeout = this.asNumber(
+    'KAFKA_AUTHENTICATION_TIMEOUT',
+  );
+
+  public readonly reauthenticationThreshold = this.asNumber(
+    'KAFKA_REAUTHENTICATION_THRESHOLD',
+  );
+
   public readonly topicAutoCreate = this.asBoolean('KAFKA_TOPIC_AUTO_CREATE') ??
     false;
 
   public readonly logLevel = this.asString('KAFKA_LOG_LEVEL') ?? 'error';
 
+  public sessionTimeout = this.asNumber('KAFKA_CONSUMER_SESSION_TIMEOUT');
+
+  public rebalanceTimeout = this.asNumber('KAFKA_CONSUMER_REBALANCE_TIMEOUT');
+
+  public heartbeatInterval = this.asNumber('KAFKA_CONSUMER_HEARTBEAT_INTERVAL');
+
+  public metadataMaxAge = this.asNumber('KAFKA_CONSUMER_METADATA_MAX_AGE');
+
+  public maxBytesPerPartition = this.asNumber(
+    'KAFKA_CONSUMER_MAX_BYTES_PER_PARTITION',
+  );
+
+  public minBytes = this.asNumber('KAFKA_CONSUMER_MIN_BYTES');
+
+  public maxBytes = this.asNumber('KAFKA_CONSUMER_MAX_BYTES');
+
+  public maxWaitTimeInMs = this.asNumber('KAFKA_CONSUMER_MAX_WAIT_TIME_IN_MS');
+
+  public maxInFlightRequests = this.asNumber(
+    'KAFKA_CONSUMER_MAX_IN_FLIGHT_REQUESTS',
+  );
+
+  public readUncommitted = this.asBoolean('KAFKA_CONSUMER_READ_UNCOMMITTED');
+
+  public rackId = this.asString('KAFKA_CONSUMER_RACK_ID');
+
   public getConfig(): KafkaConfig {
     return {
       brokers: this.brokers,
       clientId: this.clientId,
+      connectionTimeout: this.connectionTimeout,
+      authenticationTimeout: this.authenticationTimeout,
+      reauthenticationThreshold: this.reauthenticationThreshold,
+      requestTimeout: this.requestTimeout,
+      enforceRequestTimeout: this.enforceTimeout,
+      topicAutoCreate: this.topicAutoCreate,
+      logLevel: this.getLogLevel(this.logLevel),
       retry: {
-        retries: this.retryCount,
-        initialRetryTime: this.retryDelay,
         maxRetryTime: this.retryTimeout,
+        initialRetryTime: this.retryDelay,
+        factor: this.retryFactor,
+        multiplier: this.retryMultiplier,
+        retries: this.retryCount,
       },
       consumer: {
         groupId: this.groupId,
+        metadataMaxAge: this.metadataMaxAge,
+        sessionTimeout: this.sessionTimeout,
+        rebalanceTimeout: this.rebalanceTimeout,
+        heartbeatInterval: this.heartbeatInterval,
+        maxBytesPerPartition: this.maxBytesPerPartition,
+        minBytes: this.minBytes,
+        maxBytes: this.maxBytes,
+        maxWaitTimeInMs: this.maxWaitTimeInMs,
+        maxInFlightRequests: this.maxInFlightRequests,
+        readUncommitted: this.readUncommitted,
+        rackId: this.rackId,
       },
-      enforceRequestTimeout: this.enforceTimeout,
-      connectionTimeout: this.connectionTimeout,
-      requestTimeout: this.requestTimeout,
-      topicAutoCreate: this.topicAutoCreate,
-      logLevel: this.getLogLevel(this.logLevel),
     };
   }
 
