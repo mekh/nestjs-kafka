@@ -1,7 +1,7 @@
 import { KafkaRegistryService } from '../src/kafka-registry.service';
+import { KafkaSerdeService } from '../src/kafka-serde.service';
 import { KAFKA_CONFIG_TOKEN } from '../src/kafka.constants';
 import { ConsumerDecorator } from '../src/kafka.decorators';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
 
 class InstanceWrapper<T extends object> {
   constructor(public instance: T, public metatype: any = {}) {}
@@ -22,18 +22,20 @@ describe('KafkaRegistryService scanning and config precedence', () => {
 
     const discoveryService: any = {
       getProviders: jest.fn(() => [providerWrapper]),
-      getMetadataByDecorator: jest.fn((decorator: any, _provider: any, method: string) => {
-        if (decorator === ConsumerDecorator && method === 'handle') {
-          return {
-            topics: ['topic-x'],
-            groupId: 'g-override',
-            autoCommit: false,
-            fromBeginning: true,
-            batch: true,
-          } as any;
-        }
-        return undefined;
-      }),
+      getMetadataByDecorator: jest.fn(
+        (decorator: any, _provider: any, method: string) => {
+          if (decorator === ConsumerDecorator && method === 'handle') {
+            return {
+              topics: ['topic-x'],
+              groupId: 'g-override',
+              autoCommit: false,
+              fromBeginning: true,
+              batch: true,
+            } as any;
+          }
+          return undefined;
+        },
+      ),
     };
 
     const metadataScanner: any = {
