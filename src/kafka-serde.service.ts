@@ -11,10 +11,11 @@ import {
   KafkaMessage,
   KafkaSendInput,
   KafkaSendInputMessage,
+  KafkaSerde,
 } from './kafka.interfaces';
 
 @Injectable()
-export class KafkaSerdeService {
+export class KafkaSerdeService implements KafkaSerde {
   public serialize(data: KafkaSendInput): Message[] {
     return Array.isArray(data.messages)
       ? data.messages.map((msg) => this.serializeMessage(msg))

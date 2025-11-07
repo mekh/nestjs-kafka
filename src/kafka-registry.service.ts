@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
+import { KafkaSerdeService } from './kafka-serde.service';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 
 import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
@@ -11,6 +12,7 @@ import {
   KafkaConfig,
   KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
+  KafkaSerde,
 } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
@@ -29,6 +31,7 @@ export class KafkaRegistryService implements OnModuleInit {
 
   constructor(
     @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
+    @Inject(KafkaSerdeService) private readonly serde: KafkaSerde,
     private readonly discoveryService: DiscoveryService,
     private readonly metadataScanner: MetadataScanner,
   ) {
@@ -131,7 +134,12 @@ export class KafkaRegistryService implements OnModuleInit {
     methodName: string,
   ): void {
     const handlers = this.handlers.get(topic) ?? [];
-    const handler = KafkaHandler.create(config, provider, methodName);
+    const handler = KafkaHandler.create(
+      config,
+      provider,
+      methodName,
+      this.serde,
+    );
 
     handlers.push(handler);
 

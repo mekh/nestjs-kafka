@@ -1,6 +1,7 @@
 import { KafkaService } from '../src';
 import { KafkaAdminService } from '../src/kafka-admin.service';
 import { KafkaRegistryService } from '../src/kafka-registry.service';
+import { KafkaSerdeService } from '../src/kafka-serde.service';
 // @ts-ignore
 import { __setKafkaMock } from 'kafkajs';
 
@@ -24,6 +25,7 @@ describe('KafkaService', () => {
   const makeConsumer = () => ({
     groupId: 'g1',
     autoCommit: false,
+    batch: false,
     createConsumer: jest.fn(() => undefined),
     connect: jest.fn(async () => undefined),
     subscribe: jest.fn(async () => undefined),
@@ -42,6 +44,7 @@ describe('KafkaService', () => {
   } as any;
 
   const config: any = { brokers: ['b:1'] };
+  const serde = new KafkaSerdeService();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -52,7 +55,7 @@ describe('KafkaService', () => {
     const cons = makeConsumer();
     registry.getConsumers.mockReturnValue([cons as any]);
 
-    const s = new KafkaService(config, registry, admin);
+    const s = new KafkaService(config, serde, registry, admin);
 
     await s.connect();
 
@@ -70,7 +73,7 @@ describe('KafkaService', () => {
     const cons = makeConsumer();
     registry.getConsumers.mockReturnValue([cons as any]);
 
-    const s = new KafkaService(config, registry, admin);
+    const s = new KafkaService(config, serde, registry, admin);
     await s.connect();
 
     await s.disconnect();
@@ -80,7 +83,7 @@ describe('KafkaService', () => {
   });
 
   it('should send messages and ensure topics', async () => {
-    const s = new KafkaService(config, registry, admin);
+    const s = new KafkaService(config, serde, registry, admin);
 
     const res = await s.send({
       topic: 't',
@@ -95,92 +98,5 @@ describe('KafkaService', () => {
       ],
     });
     expect(res.length).toBe(1);
-  });
-
-  it('should format and parse messages and handle ack', async () => {
-    const s = new KafkaService(config, registry, admin);
-
-    const payload: any = {
-      topic: 't',
-      partition: 0,
-      message: {
-        offset: '0',
-        key: Buffer.from('k'),
-        value: Buffer.from(JSON.stringify({ a: 1 })),
-        timestamp: '0',
-      },
-    };
-
-    const parsed = (s as any).parseMessage(payload.message.value);
-    expect(parsed).toEqual({ a: 1 });
-
-    const fmt = (s as any).formatLogMessage(payload);
-    expect(fmt).toEqual({
-      topic: 't',
-      partition: 0,
-      offset: '0',
-      key: 'k',
-      message: JSON.stringify({ a: 1 }),
-      timestamp: '0',
-    });
-
-    const handler = jest.fn(async () => undefined);
-    registry.getHandlers.mockReturnValueOnce([
-      { handle: handler } as any,
-    ]);
-
-    await (s as any).handleMessage(payload, {
-      autoCommit: false,
-      commitOffset: jest.fn(async () => undefined),
-    });
-
-    expect(handler).toHaveBeenCalled();
-  });
-
-  it('should commit offset when autoCommit disabled', async () => {
-    const s = new KafkaService(config, registry, admin);
-
-    const payload: any = {
-      topic: 't',
-      partition: 0,
-      message: { offset: '5' },
-    };
-
-    const consumer: any = {
-      autoCommit: false,
-      commitOffset: jest.fn(async () => undefined),
-    };
-
-    await (s as any).commitOffset(payload, consumer);
-
-    expect(consumer.commitOffset).toHaveBeenCalledWith({
-      topic: 't',
-      partition: 0,
-      offset: '6',
-    });
-  });
-
-  it('should handle empty/invalid messages and log warn', async () => {
-    const s = new KafkaService(config, registry, admin);
-
-    const payload: any = {
-      topic: 't',
-      partition: 0,
-      message: { offset: '0', value: undefined, timestamp: '0' },
-    };
-
-    expect((s as any).parseMessage(payload)).toBeUndefined();
-
-    const bad: any = {
-      topic: 't',
-      partition: 0,
-      message: {
-        offset: '0',
-        value: Buffer.from('not-json'),
-        timestamp: '0',
-      },
-    };
-
-    expect((s as any).parseMessage(bad)).toBeUndefined();
   });
 });

@@ -1,27 +1,9 @@
-import { KafkaAdminService } from '../src/kafka-admin.service';
-import { KafkaRegistryService } from '../src/kafka-registry.service';
-import { KafkaService } from '../src/kafka.service';
+import { KafkaSerdeService } from '../src/kafka-serde.service';
 
-describe('KafkaService normalization helpers', () => {
-  const dummyConfig: any = { brokers: ['b:1'] };
-  const admin: any = {
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    ensureTopics: jest.fn(),
-  };
-  const registry: any = {
-    getTopics: jest.fn(() => []),
-    getConsumers: jest.fn(() => []),
-    getHandlers: jest.fn(() => []),
-  };
+describe('KafkaSerdeService normalization helpers', () => {
+  const serde = new KafkaSerdeService();
 
-  const service = new KafkaService(
-    dummyConfig,
-    registry as KafkaRegistryService,
-    admin as KafkaAdminService,
-  );
-
-  it('formatMessage should coerce key/headers to string and parse value', () => {
+  it('deserializeMessage should coerce key/headers to string and parse value', () => {
     const msg: any = {
       key: Buffer.from('k-key'),
       value: Buffer.from(JSON.stringify({ ok: true })),
@@ -33,14 +15,14 @@ describe('KafkaService normalization helpers', () => {
       offset: '0',
     };
 
-    const out = (service as any).formatMessage(msg);
+    const out = (serde as any).deserializeMessage(msg);
     expect(out.key).toBe('k-key');
     expect(out.value).toEqual({ ok: true });
     expect(out.headers).toEqual({ x: '1', y: undefined });
   });
 
   it('parseHeaders should return undefined when no headers', () => {
-    const res = (service as any).parseHeaders(undefined);
+    const res = (serde as any).parseHeaders(undefined);
     expect(res).toBeUndefined();
   });
 });

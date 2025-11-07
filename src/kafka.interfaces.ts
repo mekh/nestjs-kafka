@@ -14,6 +14,12 @@ import { KafkaLogLevel } from './kafka.enums';
 
 export { ConsumerConfig } from 'kafkajs';
 
+export interface KafkaSerde {
+  serialize(data: KafkaSendInput): Message[];
+  deserialize(payload: EachMessagePayload): KafkaMessage;
+  deserialize(payload: EachBatchPayload): KafkaMessage[];
+}
+
 export interface KafkaMessage<
   T extends Record<string, any> = Record<string, any>,
 > extends Omit<IKafkaMessage, 'value' | 'key'> {
