@@ -12,7 +12,6 @@ export {
   KafkaBatchPayload,
   KafkaConfig,
   KafkaConsumerConfig,
-  KafkaConsumerHandler,
   KafkaConsumerPayload,
   KafkaSendInput,
   KafkaSendInputMessage,

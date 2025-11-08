@@ -13,6 +13,8 @@ import {
   KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
   KafkaSerde,
+  RunConfig,
+  SubscriptionConfig,
 } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
@@ -88,18 +90,10 @@ export class KafkaRegistryService implements OnModuleInit {
     }
 
     const config = this.composeConfig(meta);
-    const { topics, fromBeginning, autoCommit } = meta;
+    this.registerConsumer(config);
 
-    this.registerConsumer({
-      config,
-      topics,
-      fromBeginning: fromBeginning ?? false,
-      autoCommit: autoCommit ?? true,
-      batch: meta.batch ?? false,
-    });
-
-    topics.forEach((topic) => {
-      this.registerHandler(topic, config, provider, method);
+    config.subscriptionConfig.topics.forEach((topic) => {
+      this.registerHandler(topic, config.consumerConfig, provider, method);
     });
   }
 
@@ -111,20 +105,13 @@ export class KafkaRegistryService implements OnModuleInit {
     );
   }
 
-  private registerConsumer(data: ConsumerCreateInput): void {
-    const { config, topics, fromBeginning, autoCommit, batch } = data;
-    const consumer = this.consumers.get(config.groupId) ??
-      KafkaConsumer.create({
-        topics: [],
-        config,
-        fromBeginning,
-        autoCommit,
-        batch,
-      });
+  private registerConsumer(config: ConsumerCreateInput): void {
+    const { groupId: id } = config.consumerConfig;
+    const consumer = this.consumers.get(id) ?? KafkaConsumer.create(config);
 
-    consumer.addTopics(topics);
+    consumer.addTopics(config.subscriptionConfig.topics);
 
-    this.consumers.set(config.groupId, consumer);
+    this.consumers.set(id, consumer);
   }
 
   private registerHandler(
@@ -152,15 +139,46 @@ export class KafkaRegistryService implements OnModuleInit {
     this.handlers.set(topic, handlers);
   }
 
-  private composeConfig(meta: Opts): ConsumerConfig {
-    const { topics, fromBeginning, autoCommit, ...consumerConfig } = meta;
+  private composeConfig(flatConfig: Opts): ConsumerCreateInput {
+    const {
+      topics,
+      fromBeginning,
+      batch,
+      autoCommit,
+      autoCommitInterval,
+      autoCommitThreshold,
+      partitionsConsumedConcurrently,
+      ...consumerConfig
+    } = flatConfig;
 
-    const config = { ...this.defaultConsumerConfig, ...consumerConfig };
-    if (!this.isConsumerConfig(config)) {
+    const runConfig: RunConfig = {
+      batch,
+      autoCommit,
+      autoCommitInterval,
+      autoCommitThreshold,
+      eachBatchAutoResolve: !!autoCommit,
+      partitionsConsumedConcurrently,
+    };
+
+    const subConfig: SubscriptionConfig = {
+      topics,
+      fromBeginning: fromBeginning ?? false,
+    };
+
+    const consumer = {
+      ...this.defaultConsumerConfig,
+      ...consumerConfig,
+    };
+
+    if (!this.isConsumerConfig(consumer)) {
       throw new Error('Invalid consumer configuration');
     }
 
-    return config;
+    return {
+      consumerConfig: consumer,
+      subscriptionConfig: subConfig,
+      runConfig,
+    };
   }
 
   private isConsumerConfig(

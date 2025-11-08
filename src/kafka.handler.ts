@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { ConsumerConfig, EachBatchPayload, EachMessagePayload } from 'kafkajs';
 
@@ -21,6 +22,8 @@ export class KafkaHandler {
     );
   }
 
+  private readonly logger = new Logger(KafkaHandler.name);
+
   constructor(
     public readonly config: ConsumerConfig,
     public readonly provider: Provider,
@@ -41,15 +44,28 @@ export class KafkaHandler {
     consumer: KafkaConsumer,
   ): Promise<void> {
     return 'batch' in payload
-      ? this.handleBatch(payload)
+      ? this.handleBatch(payload, consumer)
       : this.handleMessage(payload, consumer);
   }
 
-  protected async handleBatch(payload: EachBatchPayload): Promise<void> {
+  protected async handleBatch(
+    payload: EachBatchPayload,
+    consumer: KafkaConsumer,
+  ): Promise<void> {
+    if (payload.isStale() || !payload.isRunning()) {
+      this.logger.error('the consumer is either stale or not running');
+
+      return;
+    }
+    const ack = (): Promise<void> => this.commitOffset(payload, consumer);
+
     const messages = this.serde.deserialize(payload);
     const batch = { ...payload.batch, messages };
 
-    return this.execute({ ...payload, batch });
+    await this.execute({ ...payload, batch, ack });
+    if (consumer.autoCommit) {
+      await ack();
+    }
   }
 
   protected async handleMessage(
@@ -59,14 +75,28 @@ export class KafkaHandler {
     const message = this.serde.deserialize(payload);
     const ack = (): Promise<void> => this.commitOffset(payload, consumer);
 
-    return this.execute({ ...payload, ack, message });
+    return this.execute({ ...payload, message, ack });
   }
 
   protected async commitOffset(
-    payload: EachMessagePayload,
+    payload: EachMessagePayload | EachBatchPayload,
     consumer: KafkaConsumer,
   ): Promise<void> {
     if (consumer.autoCommit) {
+      return;
+    }
+
+    if ('batch' in payload) {
+      const lastOffset = payload.batch.lastOffset();
+      this.logger.debug(
+        'Kafka - committing batch offset %s for batch %s',
+        lastOffset,
+        payload.batch.topic,
+      );
+      payload.resolveOffset(payload.batch.lastOffset());
+
+      await payload.commitOffsetsIfNecessary(payload.uncommittedOffsets());
+
       return;
     }
 

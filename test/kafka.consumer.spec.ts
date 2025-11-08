@@ -14,12 +14,10 @@ describe('KafkaConsumer', () => {
   };
 
   const input = {
-    config: { groupId: 'g1' },
-    topics: ['t1'],
-    fromBeginning: true,
-    autoCommit: false,
-    batch: false,
-  };
+    consumerConfig: { groupId: 'g1' },
+    subscriptionConfig: { topics: ['t1'], fromBeginning: true },
+    runConfig: { autoCommit: false, batch: false, eachBatchAutoResolve: false },
+  } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -29,13 +27,13 @@ describe('KafkaConsumer', () => {
     const c = KafkaConsumer.create(input);
 
     expect(c.groupId).toBe('g1');
-    expect(c.topics).toEqual(['t1']);
-    expect(c.config).toEqual({ groupId: 'g1' });
-    expect(c.fromBeginning).toBe(true);
+    expect(c.subscriptionConfig.topics).toEqual(['t1']);
+    expect(c.consumerConfig).toEqual({ groupId: 'g1' });
+    expect(c.subscriptionConfig.fromBeginning).toBe(true);
     expect(c.autoCommit).toBe(false);
 
     c.addTopics(['t2', 't1']);
-    expect(c.topics.sort()).toEqual(['t1', 't2']);
+    expect(c.subscriptionConfig.topics.sort()).toEqual(['t1', 't2']);
   });
 
   it('should require created consumer before using it', async () => {
@@ -53,7 +51,7 @@ describe('KafkaConsumer', () => {
 
     await c.connect();
     await c.subscribe();
-    await c.run({ eachMessage: async () => undefined });
+    await c.run(async () => undefined);
 
     await c.commitOffset({
       topic: 't1',

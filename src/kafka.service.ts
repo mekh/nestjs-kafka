@@ -48,7 +48,7 @@ export class KafkaService {
 
       await consumer.connect();
       await consumer.subscribe();
-      await this.runConsumer(consumer);
+      await consumer.run(this.handle.bind(this));
 
       this.consumers.push(consumer);
     }
@@ -76,17 +76,6 @@ export class KafkaService {
 
   public async ensureTopics(topic: string | string[]): Promise<void> {
     await this.admin.ensureTopics(topic);
-  }
-
-  protected async runConsumer(consumer: KafkaConsumer): Promise<void> {
-    const autoCommit = consumer.autoCommit;
-
-    await consumer.run({
-      autoCommit,
-      ...consumer.batch
-        ? { eachBatch: this.handle.bind(this, consumer) }
-        : { eachMessage: this.handle.bind(this, consumer) },
-    });
   }
 
   protected async handle(

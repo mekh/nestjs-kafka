@@ -60,8 +60,8 @@ describe('KafkaRegistryService scanning and config precedence', () => {
     expect(consumer.groupId).toBe('g-override');
     expect(consumer.batch).toBe(true);
     expect(consumer.autoCommit).toBe(false);
-    expect(consumer.fromBeginning).toBe(true);
-    expect(consumer.topics).toEqual(['topic-x']);
+    expect(consumer.subscriptionConfig.fromBeginning).toBe(true);
+    expect(consumer.subscriptionConfig.topics).toEqual(['topic-x']);
 
     const handlers = registry.getHandlers('topic-x');
     expect(handlers && handlers.length).toBe(1);
