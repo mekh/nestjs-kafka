@@ -47,7 +47,7 @@ This module helps you:
 ## Environment Variables
 
 | Variable                               | Type     | Default            | Description                                                                                 |
-|----------------------------------------|----------|--------------------|---------------------------------------------------------------------------------------------|
+| -------------------------------------- | -------- | ------------------ | ------------------------------------------------------------------------------------------- |
 | KAFKA_BROKER                           | string[] | ['localhost:9092'] | Comma-separated list of Kafka brokers                                                       |
 | KAFKA_CLIENT_ID                        | string   | undefined          | Client ID for Kafka                                                                         |
 | KAFKA_GROUP_ID                         | string   | undefined          | Default consumer `groupId` (module-level); can be overridden per-decorator                  |
@@ -345,12 +345,6 @@ export class BatchServiceWithDecorators {
   }
 }
 ```
-
-Acknowledgement/offsets in batch mode:
-
-- Manual per-message acknowledgement via `payload.ack()` is only available in single-message mode
-- In batch mode, there is no `ack` function passed to the handler; offset commits follow your consumer configuration (`autoCommit`)
-- If you need fine-grained commit control, prefer single-message mode with `autoCommit: false` and call `payload.ack()` yourself
 
 ### Sending Messages
 

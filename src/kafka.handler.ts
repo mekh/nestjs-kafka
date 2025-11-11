@@ -1,11 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import { ConsumerConfig, EachBatchPayload, EachMessagePayload } from 'kafkajs';
+import { ConsumerConfig, EachBatchPayload } from 'kafkajs';
 
 import { KafkaConsumer } from './kafka.consumer';
-import { KafkaSerde } from './kafka.interfaces';
+import { KafkaConsumerPayload, KafkaSerde } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
+type Resume = () => void;
 
 export class KafkaHandler {
   public static create(
@@ -40,71 +41,70 @@ export class KafkaHandler {
   }
 
   public async handle(
-    payload: EachMessagePayload | EachBatchPayload,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
-    return 'batch' in payload
-      ? this.handleBatch(payload, consumer)
-      : this.handleMessage(payload, consumer);
-  }
-
-  protected async handleBatch(
     payload: EachBatchPayload,
     consumer: KafkaConsumer,
   ): Promise<void> {
-    if (payload.isStale() || !payload.isRunning()) {
-      this.logger.error('the consumer is either stale or not running');
+    const { topic, partition } = payload.batch;
 
+    const messages: KafkaConsumerPayload[] = [];
+    const isBatch = consumer.batch;
+
+    const createAck = (offset: string): () => Promise<void> => async () => {
+      payload.resolveOffset(offset);
+      if (consumer.autoCommit) {
+        return payload.commitOffsetsIfNecessary();
+      }
+
+      await consumer.commitOffset({
+        topic,
+        partition,
+        offset: (Number(offset) + 1).toString(),
+      });
+    };
+
+    const autoAck = async (ack: () => Promise<void>): Promise<void> => {
+      return consumer.autoCommit ? ack() : undefined;
+    };
+
+    for (const message of payload.batch.messages) {
+      if (payload.isStale() || !payload.isRunning()) {
+        break;
+      }
+
+      const msgPayload: KafkaConsumerPayload = {
+        message: this.serde.deserialize(message),
+        topic,
+        partition,
+        ack: createAck(message.offset),
+        pause: (): Resume => payload.pause(),
+        heartbeat: async (): Promise<void> => payload.heartbeat(),
+      };
+
+      if (isBatch) {
+        messages.push(msgPayload);
+      } else {
+        await this.execute(msgPayload);
+        await autoAck(msgPayload.ack);
+
+        await msgPayload.heartbeat();
+      }
+
+      if (!isBatch && consumer.isPaused(topic, partition)) {
+        break;
+      }
+    }
+
+    if (!isBatch) {
       return;
     }
-    const ack = (): Promise<void> => this.commitOffset(payload, consumer);
 
-    const messages = this.serde.deserialize(payload);
-    const batch = { ...payload.batch, messages };
-
-    await this.execute({ ...payload, batch, ack });
-    if (consumer.autoCommit) {
-      await ack();
-    }
-  }
-
-  protected async handleMessage(
-    payload: EachMessagePayload,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
-    const message = this.serde.deserialize(payload);
-    const ack = (): Promise<void> => this.commitOffset(payload, consumer);
-
-    return this.execute({ ...payload, message, ack });
-  }
-
-  protected async commitOffset(
-    payload: EachMessagePayload | EachBatchPayload,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
-    if (consumer.autoCommit) {
-      return;
-    }
-
-    if ('batch' in payload) {
-      const lastOffset = payload.batch.lastOffset();
-      this.logger.debug(
-        'Kafka - committing batch offset %s for batch %s',
-        lastOffset,
-        payload.batch.topic,
-      );
-      payload.resolveOffset(payload.batch.lastOffset());
-
-      await payload.commitOffsetsIfNecessary(payload.uncommittedOffsets());
-
-      return;
-    }
-
-    await consumer.commitOffset({
-      topic: payload.topic,
-      partition: payload.partition,
-      offset: (Number(payload.message.offset) + 1).toString(),
+    const batchPayload = Object.assign(payload, {
+      batch: Object.assign(payload.batch, { messages }),
+      ack: createAck(payload.batch.lastOffset()),
     });
+
+    await this.execute(batchPayload);
+    await autoAck(batchPayload.ack);
   }
 
   private async execute(data: any): Promise<void> {

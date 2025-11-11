@@ -1,11 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import {
-  EachBatchPayload,
-  EachMessagePayload,
-  Kafka,
-  Producer,
-  RecordMetadata,
-} from 'kafkajs';
+import { EachBatchPayload, Kafka, Producer, RecordMetadata } from 'kafkajs';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaRegistryService } from './kafka-registry.service';
@@ -80,26 +74,15 @@ export class KafkaService {
 
   protected async handle(
     consumer: KafkaConsumer,
-    payload: EachMessagePayload | EachBatchPayload,
+    payload: EachBatchPayload,
   ): Promise<void> {
-    const topic = 'batch' in payload ? payload.batch.topic : payload.topic;
-    const handlers = this.registry.getHandlers(topic);
+    const handlers = this.registry.getHandlers(payload.batch.topic);
     if (!handlers?.length) {
       return;
     }
 
     await Promise.allSettled(
-      handlers.map((handler) =>
-        handler
-          .handle(payload, consumer)
-          .catch((err) => this.onError(err, 'Kafka - error handling message'))
-      ),
+      handlers.map((handler) => handler.handle(payload, consumer)),
     );
-  }
-
-  protected onError(err: any, message: string): void {
-    this.logger.error(message);
-
-    throw err;
   }
 }

@@ -5,7 +5,6 @@ import {
   ConsumerRunConfig,
   ConsumerSubscribeTopics,
   EachBatchPayload,
-  EachMessagePayload,
   Kafka,
   TopicPartitionOffsetAndMetadata,
 } from 'kafkajs';
@@ -19,9 +18,9 @@ export interface ConsumerCreateInput {
 }
 
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
-type ConsumerHandler = (
+type BatchHandler = (
   consumer: KafkaConsumer,
-  payload: EachMessagePayload | EachBatchPayload,
+  payload: EachBatchPayload,
 ) => Promise<void>;
 
 export class KafkaConsumer {
@@ -73,7 +72,7 @@ export class KafkaConsumer {
   }
 
   public get autoCommit(): boolean {
-    return !!this.input.runConfig.autoCommit;
+    return this.input.runConfig.autoCommit ?? true;
   }
 
   public addTopics(topics: string[]): void {
@@ -106,12 +105,10 @@ export class KafkaConsumer {
       });
   }
 
-  public async run(handle: ConsumerHandler): Promise<void> {
+  public async run(handle: BatchHandler): Promise<void> {
     await this.consumer.run({
       ...this.runConfig,
-      ...this.batch
-        ? { eachBatch: handle.bind(handle, this) }
-        : { eachMessage: handle.bind(handle, this) },
+      eachBatch: handle.bind(handle, this),
     });
 
     this.logger.log('Kafka consumer - started (%s)', this.groupId);
@@ -135,6 +132,12 @@ export class KafkaConsumer {
       'Kafka consumer - committed (%s): %o',
       this.groupId,
       data,
+    );
+  }
+
+  public isPaused(topic: string, partition: number): boolean {
+    return this.consumer.paused().some(({ topic: t, partitions: p }) =>
+      t === topic && p.includes(partition)
     );
   }
 }

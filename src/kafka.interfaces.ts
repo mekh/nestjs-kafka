@@ -17,8 +17,8 @@ export { ConsumerConfig } from 'kafkajs';
 
 export interface KafkaSerde {
   serialize(data: KafkaSendInput): Message[];
-  deserialize(payload: EachMessagePayload): KafkaMessage;
-  deserialize(payload: EachBatchPayload): KafkaMessage[];
+  deserialize(payload: IKafkaMessage): KafkaMessage;
+  deserialize(payload: IKafkaMessage[]): KafkaMessage[];
 }
 
 export interface KafkaMessage<
@@ -41,7 +41,7 @@ export interface KafkaConsumerPayload<
 export interface KafkaBatch<
   T extends Record<string, any> = Record<string, any>,
 > extends Omit<Batch, 'messages'> {
-  messages: KafkaMessage<T>[];
+  messages: KafkaConsumerPayload<T>[];
 }
 
 export interface KafkaBatchPayload<

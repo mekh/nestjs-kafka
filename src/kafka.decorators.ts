@@ -72,7 +72,7 @@ export const KafkaConsumer = (
     key: string | symbol,
     descriptor: PropertyDescriptor,
   ) => {
-    const orig: Function = descriptor.value;
+    const origFn: Function = descriptor.value;
 
     descriptor.value = function(
       data: KafkaConsumerPayload | KafkaBatchPayload,
@@ -86,30 +86,30 @@ export const KafkaConsumer = (
 
       const getKeys = (): unknown => {
         return isBatch
-          ? data.batch.messages.map((m) => m.key)
+          ? data.batch.messages.map(({ message }) => message.key)
           : data.message.key;
       };
 
       const getValues = (): unknown => {
         return isBatch
-          ? data.batch.messages.map((m) => m.value)
+          ? data.batch.messages.map(({ message }) => message.value)
           : data.message.value;
       };
 
       const getHeaders = (): unknown => {
         return isBatch
-          ? data.batch.messages.map((m) => m.headers)
+          ? data.batch.messages.map(({ message }) => message.headers)
           : data.message.headers;
       };
 
-      const args = Array.from({ length: orig.length }, (_, i) => {
+      const args = Array.from({ length: origFn.length }, (_, i) => {
         if (keys.has(i)) { return getKeys(); }
         if (values.has(i)) { return getValues(); }
         if (headers.has(i)) { return getHeaders(); }
         return data;
       });
 
-      return orig.apply(this, args) as unknown;
+      return origFn.apply(this, args) as unknown;
     };
 
     applyDecorators(ConsumerDecorator({ topics, ...config }))(
@@ -118,7 +118,7 @@ export const KafkaConsumer = (
       descriptor,
     );
 
-    copyMeta(orig, descriptor.value as Function);
+    copyMeta(origFn, descriptor.value as Function);
   };
 };
 

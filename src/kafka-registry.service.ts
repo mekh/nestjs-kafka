@@ -142,9 +142,9 @@ export class KafkaRegistryService implements OnModuleInit {
   private composeConfig(flatConfig: Opts): ConsumerCreateInput {
     const {
       topics,
-      fromBeginning,
-      batch,
-      autoCommit,
+      batch = true,
+      autoCommit = true,
+      fromBeginning = false,
       autoCommitInterval,
       autoCommitThreshold,
       partitionsConsumedConcurrently,
@@ -156,13 +156,13 @@ export class KafkaRegistryService implements OnModuleInit {
       autoCommit,
       autoCommitInterval,
       autoCommitThreshold,
-      eachBatchAutoResolve: !!autoCommit,
+      eachBatchAutoResolve: batch && autoCommit,
       partitionsConsumedConcurrently,
     };
 
     const subConfig: SubscriptionConfig = {
       topics,
-      fromBeginning: fromBeginning ?? false,
+      fromBeginning,
     };
 
     const consumer = {

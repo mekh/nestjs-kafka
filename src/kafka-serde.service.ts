@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  EachBatchPayload,
-  EachMessagePayload,
-  IHeaders,
-  KafkaMessage as IKafkaMessage,
-  Message,
-} from 'kafkajs';
+import { IHeaders, KafkaMessage as IKafkaMessage, Message } from 'kafkajs';
 
 import {
   KafkaMessage,
@@ -22,27 +16,9 @@ export class KafkaSerdeService implements KafkaSerde {
       : [this.serializeMessage(data.messages)];
   }
 
-  public deserialize(payload: EachMessagePayload): KafkaMessage;
-  public deserialize(payload: EachBatchPayload): KafkaMessage[];
+  public deserialize(message: IKafkaMessage): KafkaMessage;
+  public deserialize(message: IKafkaMessage[]): KafkaMessage[];
   public deserialize(
-    payload: EachMessagePayload | EachBatchPayload,
-  ): KafkaMessage | KafkaMessage[] {
-    return 'batch' in payload
-      ? this.deserializeMessage(payload.batch.messages)
-      : this.deserializeMessage(payload.message);
-  }
-
-  protected serializeMessage(data: KafkaSendInputMessage): Message {
-    const value = this.isObj(data.value)
-      ? JSON.stringify(data.value)
-      : data.value;
-
-    return { ...data, value };
-  }
-
-  protected deserializeMessage(message: IKafkaMessage): KafkaMessage;
-  protected deserializeMessage(message: IKafkaMessage[]): KafkaMessage[];
-  protected deserializeMessage(
     message: IKafkaMessage | IKafkaMessage[],
   ): KafkaMessage | KafkaMessage[] {
     const isArray = Array.isArray(message);
@@ -57,6 +33,14 @@ export class KafkaSerdeService implements KafkaSerde {
     });
 
     return isArray ? res : res[0];
+  }
+
+  protected serializeMessage(data: KafkaSendInputMessage): Message {
+    const value = this.isObj(data.value)
+      ? JSON.stringify(data.value)
+      : data.value;
+
+    return { ...data, value };
   }
 
   protected parseMessage(
