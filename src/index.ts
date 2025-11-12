@@ -12,7 +12,7 @@ export {
   KafkaBatchPayload,
   KafkaConfig,
   KafkaConsumerConfig,
-  KafkaConsumerPayload,
+  KafkaEachMessagePayload,
   KafkaSendInput,
   KafkaSendInputMessage,
 } from './kafka.interfaces';

@@ -1,10 +1,15 @@
 import { Logger } from '@nestjs/common';
-import { EachBatchPayload, KafkaMessage } from 'kafkajs';
+import {
+  EachBatchPayload,
+  KafkaMessage,
+  Offsets,
+  OffsetsByTopicPartition,
+} from 'kafkajs';
 
 import {
   KafkaBatch as IBatch,
   KafkaBatchPayload,
-  KafkaConsumerPayload,
+  KafkaEachMessagePayload,
   KafkaSerde,
 } from './kafka.interfaces';
 
@@ -14,7 +19,7 @@ type CreateAckFn = (offset: string) => AckFn;
 
 export class KafkaBatch<
   T extends Record<string, any> = Record<string, any>,
-> implements Iterable<KafkaConsumerPayload<T>> {
+> implements Iterable<KafkaEachMessagePayload<T>> {
   public static create(
     payload: EachBatchPayload,
     serde: KafkaSerde,
@@ -43,7 +48,7 @@ export class KafkaBatch<
     return this.rawPayload.batch.lastOffset();
   }
 
-  *[Symbol.iterator](): Iterator<KafkaConsumerPayload<T>> {
+  *[Symbol.iterator](): Iterator<KafkaEachMessagePayload<T>> {
     for (const message of this.rawPayload.batch.messages) {
       yield this.formatMessage(message);
     }
@@ -72,12 +77,28 @@ export class KafkaBatch<
     return this.rawPayload.isStale();
   }
 
-  public createPayload(): KafkaBatchPayload<T> {
-    const { batch, ...payload } = this.rawPayload;
+  public resolveOffset(offset: string): void {
+    return this.rawPayload.resolveOffset(offset);
+  }
 
+  public uncommittedOffsets(): OffsetsByTopicPartition {
+    return this.rawPayload.uncommittedOffsets();
+  }
+
+  public commitOffsetsIfNecessary(offsets?: Offsets): Promise<void> {
+    return this.rawPayload.commitOffsetsIfNecessary(offsets);
+  }
+
+  public createPayload(): KafkaBatchPayload<T> {
     return {
-      ...payload,
       batch: this.createBatch(),
+      resolveOffset: this.resolveOffset.bind(this),
+      heartbeat: this.heartbeat.bind(this),
+      pause: this.pause.bind(this),
+      commitOffsetsIfNecessary: this.commitOffsetsIfNecessary.bind(this),
+      uncommittedOffsets: this.uncommittedOffsets.bind(this),
+      isRunning: this.isRunning.bind(this),
+      isStale: this.isStale.bind(this),
       ack: this.createAck(this.lastOffset),
     };
   }
@@ -91,7 +112,7 @@ export class KafkaBatch<
     };
   }
 
-  private formatMessage(message: KafkaMessage): KafkaConsumerPayload<T> {
+  private formatMessage(message: KafkaMessage): KafkaEachMessagePayload<T> {
     return {
       message: this.serde.deserialize(message),
       topic: this.topic,
@@ -99,6 +120,6 @@ export class KafkaBatch<
       pause: this.pause.bind(this),
       heartbeat: this.heartbeat.bind(this),
       ack: this.createAck(message.offset),
-    } as KafkaConsumerPayload<T>;
+    };
   }
 }

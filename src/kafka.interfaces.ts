@@ -15,21 +15,23 @@ import { KafkaLogLevel } from './kafka.enums';
 
 export { ConsumerConfig } from 'kafkajs';
 
+type Value = Record<string, any>;
+
 export interface KafkaSerde {
   serialize(data: KafkaSendInput): Message[];
-  deserialize(payload: IKafkaMessage): KafkaMessage;
-  deserialize(payload: IKafkaMessage[]): KafkaMessage[];
+  deserialize<T extends Value>(payload: IKafkaMessage): KafkaMessage<T>;
+  deserialize<T extends Value>(payload: IKafkaMessage[]): KafkaMessage<T>[];
 }
 
 export interface KafkaMessage<
-  T extends Record<string, any> = Record<string, any>,
+  T extends Value = Value,
 > extends Omit<IKafkaMessage, 'value' | 'key'> {
   key?: string;
   value?: T;
 }
 
-export interface KafkaConsumerPayload<
-  T extends Record<string, any> = Record<string, any>,
+export interface KafkaEachMessagePayload<
+  T extends Value = Value,
 > extends Omit<EachMessagePayload, 'message'> {
   message: KafkaMessage<T>;
   /**
@@ -39,13 +41,13 @@ export interface KafkaConsumerPayload<
 }
 
 export interface KafkaBatch<
-  T extends Record<string, any> = Record<string, any>,
+  T extends Value = Value,
 > extends Omit<Batch, 'messages'> {
-  messages: KafkaConsumerPayload<T>[];
+  messages: KafkaEachMessagePayload<T>[];
 }
 
 export interface KafkaBatchPayload<
-  T extends Record<string, any> = Record<string, any>,
+  T extends Value = Value,
 > extends Omit<EachBatchPayload, 'batch'> {
   batch: KafkaBatch<T>;
   ack: () => Promise<void>;
@@ -159,7 +161,7 @@ export type RunConfig =
   & Pick<ConsumerRunConfig, 'eachBatchAutoResolve'>;
 
 export interface KafkaSendInputMessage extends Omit<Message, 'value'> {
-  value: Record<string, any> | Buffer | string | null;
+  value: Value | Buffer | string | null;
 }
 
 export interface KafkaSendInput extends Omit<ProducerRecord, 'messages'> {

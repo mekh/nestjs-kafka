@@ -6,7 +6,7 @@ import { KafkaBatch } from './kafka.batch';
 import { KafkaConsumer } from './kafka.consumer';
 import {
   KafkaBatchPayload,
-  KafkaConsumerPayload,
+  KafkaEachMessagePayload,
   KafkaSerde,
 } from './kafka.interfaces';
 
@@ -118,7 +118,7 @@ export class KafkaHandler {
   }
 
   private async execute(
-    data: KafkaConsumerPayload | KafkaBatchPayload,
+    data: KafkaEachMessagePayload | KafkaBatchPayload,
   ): Promise<void> {
     const method = this.methodName as keyof typeof this.provider.instance;
     const handler: ProviderMethod = this.provider.instance[method];

@@ -10,7 +10,7 @@ import {
   KafkaBatchPayload,
   KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
-  KafkaConsumerPayload,
+  KafkaEachMessagePayload,
 } from './kafka.interfaces';
 
 const copyMeta = (source: { name: string }, target: object): void => {
@@ -75,7 +75,7 @@ export const KafkaConsumer = (
     const origFn: Function = descriptor.value;
 
     descriptor.value = function(
-      data: KafkaConsumerPayload | KafkaBatchPayload,
+      data: KafkaEachMessagePayload | KafkaBatchPayload,
     ): unknown {
       const [keys, values, headers] = [
         Reflect.getOwnMetadata(KAFKA_KEY_META, target, key) ?? [],

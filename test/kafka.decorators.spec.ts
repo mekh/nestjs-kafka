@@ -1,4 +1,12 @@
-import { Headers, KafkaBatchConsumer, KafkaConsumer, KafkaBatchPayload, KafkaConsumerPayload, Key, Value } from '../src';
+import {
+  Headers,
+  KafkaBatchConsumer,
+  KafkaBatchPayload,
+  KafkaConsumer,
+  KafkaEachMessagePayload,
+  Key,
+  Value,
+} from '../src';
 
 describe('Decorators: KafkaConsumer parameter injection', () => {
   it('should map @Value, @Key, @Headers and pass full payload to undecorated params (single message mode)', async () => {
@@ -9,7 +17,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
         @Value() value: any,
         @Key() key: string | undefined,
         @Headers() headers: Record<string, string | undefined> | undefined,
-        payload: KafkaConsumerPayload,
+        payload: KafkaEachMessagePayload,
       ) {
         return { value, key, headers, payload };
       }
@@ -18,7 +26,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
     const svc = new TestSvc();
 
     // We simulate what KafkaService passes after normalization
-    const payload: KafkaConsumerPayload = {
+    const payload: KafkaEachMessagePayload = {
       topic: 'topic-1',
       partition: 0,
       heartbeat: async () => undefined as any,
@@ -63,8 +71,20 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
         topic: 'topic-batch',
         partition: 0,
         messages: [
-          { offset: '1', timestamp: '0', key: 'k1', value: { x: 1 } as any, headers: { a: '1' } } as any,
-          { offset: '2', timestamp: '0', key: undefined, value: { x: 2 } as any, headers: { b: '2' } } as any,
+          {
+            offset: '1',
+            timestamp: '0',
+            key: 'k1',
+            value: { x: 1 } as any,
+            headers: { a: '1' },
+          } as any,
+          {
+            offset: '2',
+            timestamp: '0',
+            key: undefined,
+            value: { x: 2 } as any,
+            headers: { b: '2' },
+          } as any,
         ],
         isEmpty: () => false,
         firstOffset: () => '1',
@@ -109,8 +129,18 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
         topic: 'topic-batch-2',
         partition: 1,
         messages: [
-          { offset: '1', timestamp: '0', key: 'A', value: { a: 1 } as any } as any,
-          { offset: '2', timestamp: '0', key: 'B', value: { a: 2 } as any } as any,
+          {
+            offset: '1',
+            timestamp: '0',
+            key: 'A',
+            value: { a: 1 } as any,
+          } as any,
+          {
+            offset: '2',
+            timestamp: '0',
+            key: 'B',
+            value: { a: 2 } as any,
+          } as any,
         ],
       } as any,
     } as any;
