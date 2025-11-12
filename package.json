@@ -1,6 +1,6 @@
 {
   "name": "@toxicoder/nestjs-kafka",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Kafka module for NestJS",
   "author": "toxicoder",
   "main": "dist/index.js",

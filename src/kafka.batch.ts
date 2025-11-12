@@ -36,6 +36,10 @@ export class KafkaBatch<
     private readonly createAck: CreateAckFn,
   ) {}
 
+  public get length(): number {
+    return this.rawPayload.batch.messages.length;
+  }
+
   public get topic(): string {
     return this.rawPayload.batch.topic;
   }
