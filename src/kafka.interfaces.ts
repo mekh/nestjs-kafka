@@ -95,7 +95,7 @@ export interface KafkaConsumerConfig extends Omit<ConsumerConfig, 'groupId'> {
    * The consumer will commit offsets after resolving a given
    * number of messages.
    */
-  autoCommitThreshold?: number;
+  autoCommitThreshold?: number | null;
   /**
    * Concurrently process several messages per once in a single-message mode.
    * Messages in the same partition are still guaranteed

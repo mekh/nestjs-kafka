@@ -145,13 +145,13 @@ export class KafkaRegistryService implements OnModuleInit {
       batch = true,
       autoCommit = true,
       fromBeginning = false,
-      autoCommitInterval,
-      autoCommitThreshold,
-      partitionsConsumedConcurrently,
+      autoCommitInterval = null,
+      autoCommitThreshold = null,
+      partitionsConsumedConcurrently = 1,
       ...consumerConfig
     } = flatConfig;
 
-    const runConfig: RunConfig = {
+    const runConfig: Required<RunConfig> = {
       batch,
       autoCommit,
       autoCommitInterval,

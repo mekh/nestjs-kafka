@@ -14,7 +14,7 @@ import { RunConfig, SubscriptionConfig } from './kafka.interfaces';
 export interface ConsumerCreateInput {
   consumerConfig: ConsumerConfig;
   subscriptionConfig: SubscriptionConfig;
-  runConfig: RunConfig;
+  runConfig: Required<RunConfig>;
 }
 
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
@@ -67,12 +67,12 @@ export class KafkaConsumer {
     return runConfig;
   }
 
-  public get batch(): boolean | undefined {
+  public get batch(): boolean {
     return this.input.runConfig.batch;
   }
 
   public get autoCommit(): boolean {
-    return this.input.runConfig.autoCommit ?? true;
+    return this.input.runConfig.autoCommit;
   }
 
   public addTopics(topics: string[]): void {

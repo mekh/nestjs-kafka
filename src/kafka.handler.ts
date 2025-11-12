@@ -52,7 +52,24 @@ export class KafkaHandler {
     const { topic, partition } = payload.batch;
     this.logger.debug('consuming batch - %s:%d', topic, partition);
 
-    const createAck = (offset: string): () => Promise<void> => async () => {
+    const batch = KafkaBatch.create(
+      payload,
+      this.serde,
+      (offset) => this.createAckFn(payload, consumer, offset),
+    );
+
+    return consumer.batch
+      ? this.handleBatch(batch, consumer)
+      : this.handleEachMessage(batch, consumer);
+  }
+
+  private createAckFn(
+    payload: EachBatchPayload,
+    consumer: KafkaConsumer,
+    offset: string,
+  ) {
+    return async (): Promise<void> => {
+      const { topic, partition } = payload.batch;
       payload.resolveOffset(offset);
       if (consumer.autoCommit) {
         this.logger.debug('auto-commit (%s) - %s:%d', offset, topic, partition);
@@ -67,12 +84,6 @@ export class KafkaHandler {
         offset: (Number(offset) + 1).toString(),
       });
     };
-
-    const batch = KafkaBatch.create(payload, this.serde, createAck);
-
-    return consumer.batch
-      ? this.handleBatch(batch, consumer)
-      : this.handleEachMessage(batch, consumer);
   }
 
   private async handleEachMessage(
