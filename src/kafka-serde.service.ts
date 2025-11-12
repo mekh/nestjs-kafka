@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IHeaders, KafkaMessage as IKafkaMessage, Message } from 'kafkajs';
 
 import {
+  Headers,
   KafkaMessage,
   KafkaSendInput,
   KafkaSendInputMessage,
@@ -61,9 +62,7 @@ export class KafkaSerdeService implements KafkaSerde {
     return parsed;
   }
 
-  protected parseHeaders(
-    headers?: IHeaders,
-  ): Record<string, string | undefined> | undefined {
+  protected parseHeaders(headers?: IHeaders): Headers | undefined {
     if (!headers) {
       return;
     }

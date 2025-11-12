@@ -1,5 +1,6 @@
 import { applyDecorators } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
+import { KafkaBatch } from './kafka.batch';
 
 import {
   KAFKA_HEADERS_META,
@@ -7,11 +8,19 @@ import {
   KAFKA_VALUE_META,
 } from './kafka.constants';
 import {
-  KafkaBatchPayload,
+  Headers as IHeaders,
   KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
   KafkaEachMessagePayload,
+  Key as IKey,
+  Value as IValue,
 } from './kafka.interfaces';
+
+interface ArgsData {
+  keys: (IKey | undefined)[];
+  values: (IValue | undefined)[];
+  headers: (IHeaders | undefined)[];
+}
 
 const copyMeta = (source: { name: string }, target: object): void => {
   Reflect.getMetadataKeys(source).forEach((key) => {
@@ -28,16 +37,11 @@ const copyMeta = (source: { name: string }, target: object): void => {
 
 const createParamDecorator = (metaKey: string | symbol): ParameterDecorator => {
   return (target: object, key: string | symbol | undefined, idx: number) => {
-    const args = Reflect.getOwnMetadata(metaKey, target, key!) ?? [];
+    const args: number[] = Reflect.getOwnMetadata(metaKey, target, key!) ?? [];
 
-    (args as number[]).push(idx);
+    args.push(idx);
 
-    Reflect.defineMetadata(
-      metaKey,
-      args,
-      target,
-      key!,
-    );
+    Reflect.defineMetadata(metaKey, args, target, key!);
   };
 };
 
@@ -75,37 +79,34 @@ export const KafkaConsumer = (
     const origFn: Function = descriptor.value;
 
     descriptor.value = function(
-      data: KafkaEachMessagePayload | KafkaBatchPayload,
+      data: KafkaEachMessagePayload | KafkaBatch,
     ): unknown {
-      const [keys, values, headers] = [
-        Reflect.getOwnMetadata(KAFKA_KEY_META, target, key) ?? [],
-        Reflect.getOwnMetadata(KAFKA_VALUE_META, target, key) ?? [],
-        Reflect.getOwnMetadata(KAFKA_HEADERS_META, target, key) ?? [],
-      ].map((idx: number[]) => new Set<number>(idx));
-      const isBatch = 'batch' in data;
+      const isBatch = data instanceof KafkaBatch;
+      const [keysIdx, valuesIdx, headersIdx] = [
+        Reflect.getOwnMetadata(KAFKA_KEY_META, target, key),
+        Reflect.getOwnMetadata(KAFKA_VALUE_META, target, key),
+        Reflect.getOwnMetadata(KAFKA_HEADERS_META, target, key),
+      ].map((idx?: number[]) => idx ? new Set<number>(idx) : undefined);
 
-      const getKeys = (): unknown => {
-        return isBatch
-          ? data.batch.messages.map(({ message }) => message.key)
-          : data.message.key;
-      };
+      if (!keysIdx && !valuesIdx && !headersIdx) {
+        return origFn.call(this, data) as unknown;
+      }
 
-      const getValues = (): unknown => {
-        return isBatch
-          ? data.batch.messages.map(({ message }) => message.value)
-          : data.message.value;
-      };
-
-      const getHeaders = (): unknown => {
-        return isBatch
-          ? data.batch.messages.map(({ message }) => message.headers)
-          : data.message.headers;
-      };
+      const messages = isBatch ? data.getMessages() : [data];
+      const { keys, values, headers } = messages.reduce<ArgsData>(
+        (acc, { message }) => {
+          if (keysIdx) { acc.keys.push(message.key); }
+          if (valuesIdx) { acc.values.push(message.value); }
+          if (headersIdx) { acc.headers.push(message.headers); }
+          return acc;
+        },
+        { keys: [], values: [], headers: [] },
+      );
 
       const args = Array.from({ length: origFn.length }, (_, i) => {
-        if (keys.has(i)) { return getKeys(); }
-        if (values.has(i)) { return getValues(); }
-        if (headers.has(i)) { return getHeaders(); }
+        if (keysIdx?.has(i)) { return isBatch ? keys : keys[0]; }
+        if (valuesIdx?.has(i)) { return isBatch ? values : values[0]; }
+        if (headersIdx?.has(i)) { return isBatch ? headers : headers[0]; }
         return data;
       });
 

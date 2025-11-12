@@ -1,3 +1,4 @@
+export { KafkaBatch } from './kafka.batch';
 export { KafkaDefaultConfig } from './kafka.config';
 export {
   Headers,

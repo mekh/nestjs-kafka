@@ -89,6 +89,16 @@ export class KafkaBatch<
     return this.rawPayload.commitOffsetsIfNecessary(offsets);
   }
 
+  public ack(): Promise<void> {
+    return this.createAck(this.lastOffset)();
+  }
+
+  public getMessages(): KafkaEachMessagePayload<T>[] {
+    return this.rawPayload.batch.messages.map((message) =>
+      this.formatMessage(message)
+    );
+  }
+
   public createPayload(): KafkaBatchPayload<T> {
     return {
       batch: this.createBatch(),
@@ -108,7 +118,7 @@ export class KafkaBatch<
 
     return {
       ...batch,
-      messages: messages.map((message) => this.formatMessage(message)),
+      messages: this.getMessages(),
     };
   }
 

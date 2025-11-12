@@ -1,5 +1,7 @@
+import { EachBatchPayload } from 'kafkajs';
 import {
   Headers,
+  KafkaBatch,
   KafkaBatchConsumer,
   KafkaBatchPayload,
   KafkaConsumer,
@@ -7,6 +9,7 @@ import {
   Key,
   Value,
 } from '../src';
+import { KafkaSerdeService } from '../src/kafka-serde.service';
 
 describe('Decorators: KafkaConsumer parameter injection', () => {
   it('should map @Value, @Key, @Headers and pass full payload to undecorated params (single message mode)', async () => {
@@ -66,28 +69,24 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
 
     const svc = new BatchSvc1();
 
-    const batchPayload: KafkaBatchPayload = {
+    const batchPayload: EachBatchPayload = {
       batch: {
         topic: 'topic-batch',
         partition: 0,
         messages: [
           {
-            message: {
-              offset: '1',
-              timestamp: '0',
-              key: 'k1',
-              value: { x: 1 } as any,
-              headers: { a: '1' },
-            },
+            offset: '1',
+            timestamp: '0',
+            key: 'k1',
+            value: JSON.stringify({ x: 1 }),
+            headers: { a: '1' },
           } as any,
           {
-            message: {
-              offset: '2',
-              timestamp: '0',
-              key: undefined,
-              value: { x: 2 } as any,
-              headers: { b: '2' },
-            },
+            offset: '2',
+            timestamp: '0',
+            key: undefined,
+            value: JSON.stringify({ x: 2 }),
+            headers: { b: '2' },
           } as any,
         ],
         isEmpty: () => false,
@@ -107,15 +106,18 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
       isStale: () => false,
       pause: () => undefined as any,
     } as any;
+    const batch = new KafkaBatch(
+      batchPayload,
+      new KafkaSerdeService(),
+      jest.fn,
+    );
 
-    const res = (svc as any).handle(batchPayload);
+    const res = (svc as any).handle(batch);
 
     expect(res.values).toEqual([{ x: 1 }, { x: 2 }]);
     expect(res.keys).toEqual(['k1', undefined]);
     expect(res.headersList).toEqual([{ a: '1' }, { b: '2' }]);
-    // In batch mode no ack is supplied by KafkaService, ensure handler still gets full payload
-    expect(res.payload).toBe(batchPayload);
-    expect('ack' in res.payload).toBe(false);
+    expect(res.payload).toBe(batch);
   });
 
   it('should behave the same with @KafkaBatchConsumer shortcut decorator', async () => {
@@ -128,32 +130,24 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
 
     const svc = new BatchSvc2();
 
-    const payload: KafkaBatchPayload = {
+    const payload = {
       batch: {
         topic: 'topic-batch-2',
         partition: 1,
         messages: [
-          {
-            message: {
-              offset: '1',
-              timestamp: '0',
-              key: 'A',
-              value: { a: 1 } as any,
-            },
-          } as any,
-          {
-            message: {
-              offset: '2',
-              timestamp: '0',
-              key: 'B',
-              value: { a: 2 } as any,
-            },
-          } as any,
+          { key: 'A', value: JSON.stringify({ a: 1 }) },
+          { key: 'B', value: JSON.stringify({ a: 2 }) },
         ],
-      } as any,
+      },
     } as any;
 
-    const res = (svc as any).handle(payload);
+    const batch = new KafkaBatch(
+      payload,
+      new KafkaSerdeService(),
+      jest.fn,
+    );
+
+    const res = (svc as any).handle(batch);
     expect(res.values).toEqual([{ a: 1 }, { a: 2 }]);
     expect(res.keys).toEqual(['A', 'B']);
   });

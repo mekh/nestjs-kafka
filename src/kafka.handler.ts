@@ -4,11 +4,7 @@ import { ConsumerConfig, EachBatchPayload } from 'kafkajs';
 
 import { KafkaBatch } from './kafka.batch';
 import { KafkaConsumer } from './kafka.consumer';
-import {
-  KafkaBatchPayload,
-  KafkaEachMessagePayload,
-  KafkaSerde,
-} from './kafka.interfaces';
+import { KafkaEachMessagePayload, KafkaSerde } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type ProviderMethod<T = any> = (data: T) => Promise<void> | void;
@@ -119,17 +115,16 @@ export class KafkaHandler {
   ): Promise<void> {
     const { topic, partition } = batch;
     this.logger.debug('handling batch - %s:%d', topic, partition);
-    const payload = batch.createPayload();
 
-    await this.execute(payload);
+    await this.execute(batch);
 
     if (consumer.autoCommit) {
-      await payload.ack();
+      await batch.ack();
     }
   }
 
   private async execute(
-    data: KafkaEachMessagePayload | KafkaBatchPayload,
+    data: KafkaEachMessagePayload | KafkaBatch,
   ): Promise<void> {
     const method = this.methodName as keyof typeof this.provider.instance;
     const handler: ProviderMethod = this.provider.instance[method];

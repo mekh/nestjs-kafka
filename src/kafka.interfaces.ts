@@ -15,7 +15,9 @@ import { KafkaLogLevel } from './kafka.enums';
 
 export { ConsumerConfig } from 'kafkajs';
 
-type Value = Record<string, any>;
+export type Value = Record<string, any>;
+export type Key = string;
+export type Headers = Record<string, string | undefined>;
 
 export interface KafkaSerde {
   serialize(data: KafkaSendInput): Message[];
@@ -25,9 +27,10 @@ export interface KafkaSerde {
 
 export interface KafkaMessage<
   T extends Value = Value,
-> extends Omit<IKafkaMessage, 'value' | 'key'> {
-  key?: string;
+> extends Omit<IKafkaMessage, 'value' | 'key' | 'headers'> {
+  key?: Key;
   value?: T;
+  headers?: Headers;
 }
 
 export interface KafkaEachMessagePayload<
