@@ -4,9 +4,14 @@ import { ConsumerConfig, EachBatchPayload } from 'kafkajs';
 
 import { KafkaBatch } from './kafka.batch';
 import { KafkaConsumer } from './kafka.consumer';
-import { KafkaSerde } from './kafka.interfaces';
+import {
+  KafkaBatchPayload,
+  KafkaConsumerPayload,
+  KafkaSerde,
+} from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
+type ProviderMethod<T = any> = (data: T) => Promise<void> | void;
 
 export class KafkaHandler {
   public static create(
@@ -44,15 +49,21 @@ export class KafkaHandler {
     payload: EachBatchPayload,
     consumer: KafkaConsumer,
   ): Promise<void> {
+    const { topic, partition } = payload.batch;
+    this.logger.debug('consuming batch - %s:%d', topic, partition);
+
     const createAck = (offset: string): () => Promise<void> => async () => {
       payload.resolveOffset(offset);
       if (consumer.autoCommit) {
+        this.logger.debug('auto-commit (%s) - %s:%d', offset, topic, partition);
+
         return payload.commitOffsetsIfNecessary();
       }
 
+      this.logger.debug('commit (%s) - %s:%d', offset, topic, partition);
       await consumer.commitOffset({
-        topic: payload.batch.topic,
-        partition: payload.batch.partition,
+        topic,
+        partition,
         offset: (Number(offset) + 1).toString(),
       });
     };
@@ -68,8 +79,11 @@ export class KafkaHandler {
     batch: KafkaBatch,
     consumer: KafkaConsumer,
   ): Promise<void> {
+    const { topic, partition } = batch;
+    this.logger.debug('handling each message - %s:%d', topic, partition);
     for (const message of batch) {
       if (batch.isStale() || !batch.isRunning()) {
+        this.logger.debug('batch is stale/stopped -%s:%d', topic, partition);
         break;
       }
 
@@ -82,6 +96,7 @@ export class KafkaHandler {
       await message.heartbeat();
 
       if (consumer.isPaused(batch.topic, batch.partition)) {
+        this.logger.debug('consuming is paused - %s:%d', topic, partition);
         break;
       }
     }
@@ -91,6 +106,8 @@ export class KafkaHandler {
     batch: KafkaBatch,
     consumer: KafkaConsumer,
   ): Promise<void> {
+    const { topic, partition } = batch;
+    this.logger.debug('handling batch - %s:%d', topic, partition);
     const payload = batch.createPayload();
 
     await this.execute(payload);
@@ -100,9 +117,11 @@ export class KafkaHandler {
     }
   }
 
-  private async execute(data: any): Promise<void> {
+  private async execute(
+    data: KafkaConsumerPayload | KafkaBatchPayload,
+  ): Promise<void> {
     const method = this.methodName as keyof typeof this.provider.instance;
-    const handler: Function = this.provider.instance[method];
+    const handler: ProviderMethod = this.provider.instance[method];
 
     await handler.call(this.provider.instance, data);
   }

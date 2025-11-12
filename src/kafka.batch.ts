@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { EachBatchPayload, KafkaMessage } from 'kafkajs';
 
 import {
@@ -8,12 +9,8 @@ import {
 } from './kafka.interfaces';
 
 type Resume = () => void;
-type Pause = () => Resume;
-type Heartbeat = () => Promise<void>;
 type AckFn = () => Promise<void>;
 type CreateAckFn = (offset: string) => AckFn;
-type IsStale = () => boolean;
-type IsRunning = () => boolean;
 
 export class KafkaBatch<
   T extends Record<string, any> = Record<string, any>,
@@ -25,6 +22,8 @@ export class KafkaBatch<
   ): KafkaBatch {
     return new KafkaBatch(payload, serde, createAck);
   }
+
+  private readonly logger = new Logger(KafkaBatch.name);
 
   constructor(
     private readonly rawPayload: EachBatchPayload,
@@ -40,20 +39,8 @@ export class KafkaBatch<
     return this.rawPayload.batch.partition;
   }
 
-  public get pause(): Pause {
-    return this.rawPayload.pause.bind(null);
-  }
-
-  public get heartbeat(): Heartbeat {
-    return this.rawPayload.heartbeat.bind(null);
-  }
-
-  public get isRunning(): IsRunning {
-    return this.rawPayload.isRunning.bind(null);
-  }
-
-  public get isStale(): IsStale {
-    return this.rawPayload.isStale.bind(null);
+  public get lastOffset(): string {
+    return this.rawPayload.batch.lastOffset();
   }
 
   *[Symbol.iterator](): Iterator<KafkaConsumerPayload<T>> {
@@ -62,13 +49,36 @@ export class KafkaBatch<
     }
   }
 
+  public pause(): Resume {
+    this.logger.debug('pausing batch - %s:%d', this.topic, this.partition);
+    const resume = this.rawPayload.pause();
+
+    return () => {
+      this.logger.debug('resuming batch - %s:%d', this.topic, this.partition);
+      resume();
+    };
+  }
+
+  public async heartbeat(): Promise<void> {
+    this.logger.debug('heartbeat - %s:%d', this.topic, this.partition);
+    return this.rawPayload.heartbeat();
+  }
+
+  public isRunning(): boolean {
+    return this.rawPayload.isRunning();
+  }
+
+  public isStale(): boolean {
+    return this.rawPayload.isStale();
+  }
+
   public createPayload(): KafkaBatchPayload<T> {
     const { batch, ...payload } = this.rawPayload;
 
     return {
       ...payload,
       batch: this.createBatch(),
-      ack: this.createAck(this.rawPayload.batch.lastOffset()),
+      ack: this.createAck(this.lastOffset),
     };
   }
 
@@ -86,8 +96,8 @@ export class KafkaBatch<
       message: this.serde.deserialize(message),
       topic: this.topic,
       partition: this.partition,
-      pause: this.pause,
-      heartbeat: this.heartbeat,
+      pause: this.pause.bind(this),
+      heartbeat: this.heartbeat.bind(this),
       ack: this.createAck(message.offset),
     } as KafkaConsumerPayload<T>;
   }
