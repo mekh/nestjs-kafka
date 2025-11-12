@@ -72,18 +72,22 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
         partition: 0,
         messages: [
           {
-            offset: '1',
-            timestamp: '0',
-            key: 'k1',
-            value: { x: 1 } as any,
-            headers: { a: '1' },
+            message: {
+              offset: '1',
+              timestamp: '0',
+              key: 'k1',
+              value: { x: 1 } as any,
+              headers: { a: '1' },
+            },
           } as any,
           {
-            offset: '2',
-            timestamp: '0',
-            key: undefined,
-            value: { x: 2 } as any,
-            headers: { b: '2' },
+            message: {
+              offset: '2',
+              timestamp: '0',
+              key: undefined,
+              value: { x: 2 } as any,
+              headers: { b: '2' },
+            },
           } as any,
         ],
         isEmpty: () => false,
@@ -130,16 +134,20 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
         partition: 1,
         messages: [
           {
-            offset: '1',
-            timestamp: '0',
-            key: 'A',
-            value: { a: 1 } as any,
+            message: {
+              offset: '1',
+              timestamp: '0',
+              key: 'A',
+              value: { a: 1 } as any,
+            },
           } as any,
           {
-            offset: '2',
-            timestamp: '0',
-            key: 'B',
-            value: { a: 2 } as any,
+            message: {
+              offset: '2',
+              timestamp: '0',
+              key: 'B',
+              value: { a: 2 } as any,
+            },
           } as any,
         ],
       } as any,

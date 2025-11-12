@@ -1,11 +1,13 @@
+import { KafkaMessage as IKafkaMessage } from 'kafkajs';
 import { KafkaSerdeService } from '../src/kafka-serde.service';
 
 describe('KafkaSerdeService normalization helpers', () => {
   const serde = new KafkaSerdeService();
 
   it('deserializeMessage should coerce key/headers to string and parse value', () => {
-    const msg: any = {
+    const msg: IKafkaMessage = {
       key: Buffer.from('k-key'),
+      attributes: 1,
       value: Buffer.from(JSON.stringify({ ok: true })),
       headers: {
         x: Buffer.from('1'),
@@ -15,7 +17,7 @@ describe('KafkaSerdeService normalization helpers', () => {
       offset: '0',
     };
 
-    const out = (serde as any).deserializeMessage(msg);
+    const out = serde.deserialize(msg);
     expect(out.key).toBe('k-key');
     expect(out.value).toEqual({ ok: true });
     expect(out.headers).toEqual({ x: '1', y: undefined });

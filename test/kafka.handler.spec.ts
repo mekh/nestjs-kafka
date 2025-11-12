@@ -1,5 +1,6 @@
-import { KafkaHandler } from '../src/kafka.handler';
+import { EachBatchPayload, Offsets } from 'kafkajs';
 import { KafkaSerdeService } from '../src/kafka-serde.service';
+import { KafkaHandler } from '../src/kafka.handler';
 
 describe('KafkaHandler', () => {
   class TestProvider {
@@ -16,7 +17,12 @@ describe('KafkaHandler', () => {
   const serde = new KafkaSerdeService();
 
   it('should expose provider and handler names', () => {
-    const h = KafkaHandler.create({ groupId: 'g' }, providerWrapper, 'foo', serde);
+    const h = KafkaHandler.create(
+      { groupId: 'g' },
+      providerWrapper,
+      'foo',
+      serde,
+    );
 
     expect(h.providerName).toBe('TestProvider');
     expect(h.handlerName).toBe('TestProvider.foo');
@@ -26,20 +32,37 @@ describe('KafkaHandler', () => {
     const handler = KafkaHandler
       .create({ groupId: 'g' }, providerWrapper, 'foo', serde);
 
-    const payload: any = {
-      topic: 't',
-      partition: 0,
-      message: {
-        offset: '0',
-        key: Buffer.from('k'),
-        value: Buffer.from(JSON.stringify({ ok: true })),
-        headers: { x: Buffer.from('1') },
-        timestamp: '0',
+    const payload: EachBatchPayload = {
+      batch: {
+        topic: 't',
+        partition: 0,
+        highWatermark: '1',
+        firstOffset: () => '1',
+        offsetLag: () => '1',
+        offsetLagLow: () => '1',
+        lastOffset: () => '1',
+        isEmpty: () => false,
+        messages: [{
+          offset: '0',
+          attributes: 1,
+          key: Buffer.from('k'),
+          value: Buffer.from(JSON.stringify({ ok: true })),
+          headers: { x: Buffer.from('1') },
+          timestamp: '0',
+        }],
       },
+      isStale: jest.fn(() => false),
+      isRunning: jest.fn(() => true),
+      resolveOffset: jest.fn,
+      uncommittedOffsets(): any {},
+      commitOffsetsIfNecessary(offsets?: Offsets): any {},
+      pause: () => () => {},
+      heartbeat(): any {},
     };
     const consumer: any = {
       autoCommit: false,
       commitOffset: jest.fn(async () => undefined),
+      isPaused: jest.fn(() => false),
     };
 
     await handler.handle(payload, consumer);
