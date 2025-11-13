@@ -6,35 +6,33 @@ import {
   OffsetsByTopicPartition,
 } from 'kafkajs';
 
-import {
-  KafkaBatch as IBatch,
-  KafkaBatchPayload,
-  KafkaEachMessagePayload,
-  KafkaSerde,
-} from './kafka.interfaces';
+import { KafkaSerde } from './kafka-serde';
+import { KafkaEachMessagePayload, Value } from './kafka.interfaces';
 
 type Resume = () => void;
 type AckFn = () => Promise<void>;
 type CreateAckFn = (offset: string) => AckFn;
 
 export class KafkaBatch<
-  T extends Record<string, any> = Record<string, any>,
+  T extends Value = Value,
 > implements Iterable<KafkaEachMessagePayload<T>> {
-  public static create(
+  public static create<T extends Value = Value>(
     payload: EachBatchPayload,
-    serde: KafkaSerde,
     createAck: CreateAckFn,
-  ): KafkaBatch {
-    return new KafkaBatch(payload, serde, createAck);
+  ): KafkaBatch<T> {
+    return new KafkaBatch<T>(payload, createAck);
   }
 
   private readonly logger = new Logger(KafkaBatch.name);
 
+  private readonly serde: KafkaSerde<T>;
+
   constructor(
     private readonly rawPayload: EachBatchPayload,
-    private readonly serde: KafkaSerde,
     private readonly createAck: CreateAckFn,
-  ) {}
+  ) {
+    this.serde = new KafkaSerde<T>();
+  }
 
   public get length(): number {
     return this.rawPayload.batch.messages.length;
@@ -101,29 +99,6 @@ export class KafkaBatch<
     return this.rawPayload.batch.messages.map((message) =>
       this.formatMessage(message)
     );
-  }
-
-  public createPayload(): KafkaBatchPayload<T> {
-    return {
-      batch: this.createBatch(),
-      resolveOffset: this.resolveOffset.bind(this),
-      heartbeat: this.heartbeat.bind(this),
-      pause: this.pause.bind(this),
-      commitOffsetsIfNecessary: this.commitOffsetsIfNecessary.bind(this),
-      uncommittedOffsets: this.uncommittedOffsets.bind(this),
-      isRunning: this.isRunning.bind(this),
-      isStale: this.isStale.bind(this),
-      ack: this.createAck(this.lastOffset),
-    };
-  }
-
-  private createBatch(): IBatch<T> {
-    const { messages, ...batch } = this.rawPayload.batch;
-
-    return {
-      ...batch,
-      messages: this.getMessages(),
-    };
   }
 
   private formatMessage(message: KafkaMessage): KafkaEachMessagePayload<T> {

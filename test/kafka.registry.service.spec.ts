@@ -1,6 +1,6 @@
+import { KafkaConfigService } from '../src/kafka-config.service';
 import { KafkaRegistryService } from '../src/kafka-registry.service';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
-import { KAFKA_CONFIG_TOKEN } from '../src/kafka.constants';
+import { KafkaSerde } from '../src/kafka-serde';
 import { ConsumerDecorator } from '../src/kafka.decorators';
 
 class InstanceWrapper<T extends object> {
@@ -42,13 +42,14 @@ describe('KafkaRegistryService scanning and config precedence', () => {
       getAllMethodNames: jest.fn(() => ['handle']),
     };
 
-    const serde = new KafkaSerdeService();
+    const serde = new KafkaSerde();
+    const configService = new KafkaConfigService(defaultConfig);
 
     const registry = new KafkaRegistryService(
-      (defaultConfig as any)[KAFKA_CONFIG_TOKEN] ?? defaultConfig,
       serde,
       discoveryService,
       metadataScanner,
+      configService,
     );
 
     registry.onModuleInit();
@@ -62,9 +63,5 @@ describe('KafkaRegistryService scanning and config precedence', () => {
     expect(consumer.autoCommit).toBe(false);
     expect(consumer.subscriptionConfig.fromBeginning).toBe(true);
     expect(consumer.subscriptionConfig.topics).toEqual(['topic-x']);
-
-    const handlers = registry.getHandlers('topic-x');
-    expect(handlers && handlers.length).toBe(1);
-    expect(handlers![0].handlerName).toContain('TestProvider.handle');
   });
 });

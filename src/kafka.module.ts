@@ -2,8 +2,8 @@ import { DynamicModule, Logger, Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
+import { KafkaConfigService } from './kafka-config.service';
 import { KafkaRegistryService } from './kafka-registry.service';
-import { KafkaSerdeService } from './kafka-serde.service';
 import { KafkaDefaultConfig } from './kafka.config';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 import {
@@ -16,7 +16,7 @@ const providers = [
   KafkaAdminService,
   KafkaRegistryService,
   KafkaService,
-  KafkaSerdeService,
+  KafkaConfigService,
 ];
 
 const toExport = [

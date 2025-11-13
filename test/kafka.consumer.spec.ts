@@ -15,7 +15,7 @@ describe('KafkaConsumer', () => {
 
   const input = {
     consumerConfig: { groupId: 'g1' },
-    subscriptionConfig: { topics: ['t1'], fromBeginning: true },
+    subscriptionConfig: { topics: ['t1', 't2'], fromBeginning: true },
     runConfig: { autoCommit: false, batch: false, eachBatchAutoResolve: false },
   } as any;
 
@@ -27,13 +27,10 @@ describe('KafkaConsumer', () => {
     const c = KafkaConsumer.create(input);
 
     expect(c.groupId).toBe('g1');
-    expect(c.subscriptionConfig.topics).toEqual(['t1']);
+    expect(c.subscriptionConfig.topics).toEqual(['t1', 't2']);
     expect(c.consumerConfig).toEqual({ groupId: 'g1' });
     expect(c.subscriptionConfig.fromBeginning).toBe(true);
     expect(c.autoCommit).toBe(false);
-
-    c.addTopics(['t2', 't1']);
-    expect(c.subscriptionConfig.topics.sort()).toEqual(['t1', 't2']);
   });
 
   it('should require created consumer before using it', async () => {

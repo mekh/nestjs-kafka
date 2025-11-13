@@ -1,5 +1,5 @@
 import { EachBatchPayload, Offsets } from 'kafkajs';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
+import { KafkaSerde } from '../src/kafka-serde';
 import { KafkaHandler } from '../src/kafka.handler';
 
 describe('KafkaHandler', () => {
@@ -14,7 +14,7 @@ describe('KafkaHandler', () => {
   }
 
   const providerWrapper: any = { instance: new TestProvider() };
-  const serde = new KafkaSerdeService();
+  const serde = new KafkaSerde();
 
   it('should expose provider and handler names', () => {
     const h = KafkaHandler.create(

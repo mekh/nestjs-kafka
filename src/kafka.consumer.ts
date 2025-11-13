@@ -4,12 +4,17 @@ import {
   ConsumerConfig,
   ConsumerRunConfig,
   ConsumerSubscribeTopics,
-  EachBatchPayload,
   Kafka,
   TopicPartitionOffsetAndMetadata,
 } from 'kafkajs';
 
-import { RunConfig, SubscriptionConfig } from './kafka.interfaces';
+import { KafkaBatch } from './kafka.batch';
+import { KafkaHandler } from './kafka.handler';
+import {
+  KafkaEachMessagePayload,
+  RunConfig,
+  SubscriptionConfig,
+} from './kafka.interfaces';
 
 export interface ConsumerCreateInput {
   consumerConfig: ConsumerConfig;
@@ -17,25 +22,33 @@ export interface ConsumerCreateInput {
   runConfig: Required<RunConfig>;
 }
 
+type ProviderMethod = (
+  data: KafkaEachMessagePayload | KafkaBatch,
+) => Promise<void> | void;
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
-type BatchHandler = (
-  consumer: KafkaConsumer,
-  payload: EachBatchPayload,
-) => Promise<void>;
 
 export class KafkaConsumer {
-  public static create(input: ConsumerCreateInput): KafkaConsumer {
-    return new KafkaConsumer(input);
+  public static create(
+    config: ConsumerCreateInput,
+    cb: ProviderMethod,
+  ): KafkaConsumer {
+    return new KafkaConsumer(config, cb);
   }
 
-  protected readonly logger = new Logger(KafkaConsumer.name);
+  private readonly logger = new Logger(KafkaConsumer.name);
+
+  private readonly topicsSet: Set<string>;
+
+  private readonly handler: KafkaHandler;
 
   private kafkaConsumer?: Consumer;
 
-  private topicsSet: Set<string>;
-
-  constructor(private readonly input: ConsumerCreateInput) {
-    this.topicsSet = new Set(input.subscriptionConfig.topics);
+  constructor(
+    private readonly config: ConsumerCreateInput,
+    private readonly cb: ProviderMethod,
+  ) {
+    this.handler = KafkaHandler.create(this);
+    this.topicsSet = new Set(config.subscriptionConfig.topics);
   }
 
   public get consumer(): Consumer {
@@ -47,36 +60,32 @@ export class KafkaConsumer {
   }
 
   public get groupId(): string {
-    return this.input.consumerConfig.groupId;
+    return this.config.consumerConfig.groupId;
   }
 
   public get subscriptionConfig(): ConsumerSubscribeTopics {
     return {
       topics: [...this.topicsSet.values()],
-      fromBeginning: this.input.subscriptionConfig.fromBeginning,
+      fromBeginning: this.config.subscriptionConfig.fromBeginning,
     };
   }
 
   public get consumerConfig(): ConsumerConfig {
-    return this.input.consumerConfig;
+    return this.config.consumerConfig;
   }
 
   public get runConfig(): ConsumerRunConfig {
-    const { batch, ...runConfig } = this.input.runConfig;
+    const { batch, ...runConfig } = this.config.runConfig;
 
     return runConfig;
   }
 
   public get batch(): boolean {
-    return this.input.runConfig.batch;
+    return this.config.runConfig.batch;
   }
 
   public get autoCommit(): boolean {
-    return this.input.runConfig.autoCommit;
-  }
-
-  public addTopics(topics: string[]): void {
-    topics.forEach((topic) => this.topicsSet.add(topic));
+    return this.config.runConfig.autoCommit;
   }
 
   public createConsumer(kafka: Kafka): Consumer {
@@ -105,10 +114,10 @@ export class KafkaConsumer {
       });
   }
 
-  public async run(handle: BatchHandler): Promise<void> {
+  public async run(): Promise<void> {
     await this.consumer.run({
       ...this.runConfig,
-      eachBatch: handle.bind(handle, this),
+      eachBatch: (payload) => this.handler.handle(payload),
     });
 
     this.logger.log('Kafka consumer - started (%s)', this.groupId);
@@ -121,7 +130,7 @@ export class KafkaConsumer {
     this.logger.log(
       'Kafka consumer - subscribed to topics (%s): %s',
       this.groupId,
-      config.topics.join(','),
+      config.topics.join(', '),
     );
   }
 
@@ -139,5 +148,11 @@ export class KafkaConsumer {
     return this.consumer.paused().some(({ topic: t, partitions: p }) =>
       t === topic && p.includes(partition)
     );
+  }
+
+  public async execute(
+    payload: KafkaEachMessagePayload | KafkaBatch,
+  ): Promise<void> {
+    return this.cb(payload);
   }
 }

@@ -1,7 +1,7 @@
 import { applyDecorators } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { KafkaBatch } from './kafka.batch';
 
+import { KafkaBatch } from './kafka.batch';
 import {
   KAFKA_HEADERS_META,
   KAFKA_KEY_META,
@@ -81,7 +81,6 @@ export const KafkaConsumer = (
     descriptor.value = function(
       data: KafkaEachMessagePayload | KafkaBatch,
     ): unknown {
-      const isBatch = data instanceof KafkaBatch;
       const [keysIdx, valuesIdx, headersIdx] = [
         Reflect.getOwnMetadata(KAFKA_KEY_META, target, key),
         Reflect.getOwnMetadata(KAFKA_VALUE_META, target, key),
@@ -92,6 +91,7 @@ export const KafkaConsumer = (
         return origFn.call(this, data) as unknown;
       }
 
+      const isBatch = data instanceof KafkaBatch;
       const messages = isBatch ? data.getMessages() : [data];
       const { keys, values, headers } = messages.reduce<ArgsData>(
         (acc, { message }) => {

@@ -1,59 +1,46 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import { KafkaSerdeService } from './kafka-serde.service';
-import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
 
+import { KafkaConfigService } from './kafka-config.service';
+import { KafkaBatch } from './kafka.batch';
 import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.decorators';
-import { KafkaHandler } from './kafka.handler';
+
 import {
-  ConsumerConfig,
-  KafkaConfig,
-  KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
-  KafkaSerde,
-  RunConfig,
-  SubscriptionConfig,
+  KafkaEachMessagePayload,
 } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type MaybeProvider = InstanceWrapper<object | undefined>;
 type Opts = KafkaConsumerDecoratorConfig;
+type ProviderMethod<T = any> = (data: T) => Promise<void> | void;
 
 @Injectable()
 export class KafkaRegistryService implements OnModuleInit {
   private readonly logger = new Logger(KafkaRegistryService.name);
 
-  public readonly handlers = new Map<string, KafkaHandler[]>();
+  private readonly topics = new Set<string>();
 
-  public readonly consumers = new Map<string, KafkaConsumer>();
-
-  private readonly defaultConsumerConfig?: KafkaConsumerConfig;
+  private readonly consumers: KafkaConsumer[] = [];
 
   constructor(
-    @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
-    @Inject(KafkaSerdeService) private readonly serde: KafkaSerde,
     private readonly discoveryService: DiscoveryService,
     private readonly metadataScanner: MetadataScanner,
-  ) {
-    this.defaultConsumerConfig = config.consumer;
-  }
+    private readonly configService: KafkaConfigService,
+  ) {}
 
   onModuleInit(): void {
     this.scanAndRegister();
   }
 
   public getTopics(): string[] {
-    return Array.from(this.handlers.keys());
-  }
-
-  public getHandlers(topic: string): KafkaHandler[] | undefined {
-    return this.handlers.get(topic);
+    return Array.from(this.topics.values());
   }
 
   public getConsumers(): KafkaConsumer[] {
-    return Array.from(this.consumers.values());
+    return this.consumers;
   }
 
   private scanAndRegister(): void {
@@ -89,12 +76,8 @@ export class KafkaRegistryService implements OnModuleInit {
       return;
     }
 
-    const config = this.composeConfig(meta);
-    this.registerConsumer(config);
-
-    config.subscriptionConfig.topics.forEach((topic) => {
-      this.registerHandler(topic, config.consumerConfig, provider, method);
-    });
+    const config = this.configService.composeConsumerConfig(meta);
+    this.registerConsumer(config, provider, method);
   }
 
   private getMeta(provider: Provider, method: string): Opts | undefined {
@@ -105,94 +88,35 @@ export class KafkaRegistryService implements OnModuleInit {
     );
   }
 
-  private registerConsumer(config: ConsumerCreateInput): void {
-    const { groupId: id } = config.consumerConfig;
-    const consumer = this.consumers.get(id) ?? KafkaConsumer.create(config);
-
-    consumer.addTopics(config.subscriptionConfig.topics);
-
-    this.consumers.set(id, consumer);
-  }
-
-  private registerHandler(
-    topic: string,
-    config: ConsumerConfig,
+  private registerConsumer(
+    config: ConsumerCreateInput,
     provider: Provider,
     methodName: string,
   ): void {
-    const handlers = this.handlers.get(topic) ?? [];
-    const handler = KafkaHandler.create(
-      config,
-      provider,
-      methodName,
-      this.serde,
-    );
+    const { topics } = config.subscriptionConfig;
+    const cb = this.createCb(provider, methodName);
+    const consumer = KafkaConsumer.create(config, cb);
 
-    handlers.push(handler);
+    topics.forEach((topic) => this.topics.add(topic));
 
+    const consumerName = provider.instance.constructor.name;
+    const handlerName = [consumerName, methodName].join('.');
     this.logger.log(
-      'Kafka registry - registered handler %s for topic %s',
-      handler.handlerName,
-      topic,
+      'Kafka registry - registered consumer %s for topics %s',
+      handlerName,
+      topics.join(', '),
     );
 
-    this.handlers.set(topic, handlers);
+    this.consumers.push(consumer);
   }
 
-  private composeConfig(flatConfig: Opts): ConsumerCreateInput {
-    const {
-      topics,
-      batch = true,
-      autoCommit = true,
-      fromBeginning = false,
-      autoCommitInterval = null,
-      autoCommitThreshold = null,
-      partitionsConsumedConcurrently = 1,
-      ...consumerConfig
-    } = flatConfig;
+  private createCb(
+    provider: Provider,
+    methodName: string,
+  ): ProviderMethod<KafkaEachMessagePayload | KafkaBatch> {
+    const method = methodName as keyof typeof provider.instance;
+    const cb: ProviderMethod = provider.instance[method];
 
-    const runConfig: Required<RunConfig> = {
-      batch,
-      autoCommit,
-      autoCommitInterval,
-      autoCommitThreshold,
-      eachBatchAutoResolve: batch && autoCommit,
-      partitionsConsumedConcurrently,
-    };
-
-    const subConfig: SubscriptionConfig = {
-      topics,
-      fromBeginning,
-    };
-
-    const consumer = {
-      ...this.defaultConsumerConfig,
-      ...consumerConfig,
-    };
-
-    if (!this.isConsumerConfig(consumer)) {
-      throw new Error('Invalid consumer configuration');
-    }
-
-    return {
-      consumerConfig: consumer,
-      subscriptionConfig: subConfig,
-      runConfig,
-    };
-  }
-
-  private isConsumerConfig(
-    config: KafkaConsumerConfig,
-  ): config is ConsumerConfig {
-    if (!config.groupId) {
-      this.logger.error(
-        // eslint-disable-next-line max-len
-        'The groupId was not provided either in the module config or in the decorator.',
-      );
-
-      return false;
-    }
-
-    return true;
+    return cb.bind(provider.instance);
   }
 }

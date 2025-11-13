@@ -1,7 +1,7 @@
 import { KafkaService } from '../src';
 import { KafkaAdminService } from '../src/kafka-admin.service';
 import { KafkaRegistryService } from '../src/kafka-registry.service';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
+import { KafkaSerde } from '../src/kafka-serde';
 // @ts-ignore
 import { __setKafkaMock } from 'kafkajs';
 
@@ -44,7 +44,7 @@ describe('KafkaService', () => {
   } as any;
 
   const config: any = { brokers: ['b:1'] };
-  const serde = new KafkaSerdeService();
+  const serde = new KafkaSerde();
 
   beforeEach(() => {
     jest.clearAllMocks();

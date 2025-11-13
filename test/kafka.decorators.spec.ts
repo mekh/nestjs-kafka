@@ -9,7 +9,7 @@ import {
   Key,
   Value,
 } from '../src';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
+import { KafkaSerde } from '../src/kafka-serde';
 
 describe('Decorators: KafkaConsumer parameter injection', () => {
   it('should map @Value, @Key, @Headers and pass full payload to undecorated params (single message mode)', async () => {
@@ -108,7 +108,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
     } as any;
     const batch = new KafkaBatch(
       batchPayload,
-      new KafkaSerdeService(),
+      new KafkaSerde(),
       jest.fn,
     );
 
@@ -143,7 +143,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
 
     const batch = new KafkaBatch(
       payload,
-      new KafkaSerdeService(),
+      new KafkaSerde(),
       jest.fn,
     );
 
