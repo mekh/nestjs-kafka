@@ -5,7 +5,6 @@ import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaRegistryService } from './kafka-registry.service';
 import { KafkaSerde } from './kafka-serde';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
-import { KafkaConsumer } from './kafka.consumer';
 import { KafkaConfig, KafkaSendInput } from './kafka.interfaces';
 
 @Injectable()
@@ -17,8 +16,6 @@ export class KafkaService {
   protected readonly producer: Producer;
 
   private readonly serde: KafkaSerde;
-
-  protected consumers: KafkaConsumer[] = [];
 
   constructor(
     @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
@@ -45,8 +42,6 @@ export class KafkaService {
       await consumer.connect();
       await consumer.subscribe();
       await consumer.run();
-
-      this.consumers.push(consumer);
     }
 
     this.logger.log('Kafka - initialization completed');
@@ -55,10 +50,10 @@ export class KafkaService {
   public async disconnect(): Promise<void> {
     await this.producer.disconnect();
     await Promise.allSettled(
-      this.consumers.map((consumer) => consumer.disconnect()),
+      this.registry
+        .getConsumers()
+        .map((consumer) => consumer.disconnect()),
     );
-
-    this.consumers = [];
   }
 
   public async send(data: KafkaSendInput): Promise<RecordMetadata[]> {
