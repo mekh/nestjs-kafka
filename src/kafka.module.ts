@@ -1,12 +1,13 @@
-import { DynamicModule, Logger, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Logger, Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaConfigService } from './kafka-config.service';
+import { KafkaConsumersModule } from './kafka-consumers.module';
 import { KafkaModuleConfig } from './kafka-module.config';
 import { KafkaRegistryService } from './kafka-registry.service';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
-import { ConsumerCreateInput } from './kafka.consumer';
+
 import {
   KafkaAsyncConfig,
   KafkaConfig as IKafkaConfig,
@@ -92,34 +93,6 @@ export class KafkaModule {
   }
 
   public static forFeature(input: ForFeature): DynamicModule {
-    const configMap = (Array.isArray(input) ? input : [input])
-      .reduce(
-        (acc, item) => {
-          const conf = typeof item === 'string'
-            ? { groupId: item }
-            : item;
-
-          return acc.set(conf.groupId, conf);
-        },
-        new Map<string, FeatureConfig>(),
-      );
-
-    const providers: Provider[] = [...configMap.entries()]
-      .map(([groupId, config]) => ({
-        provide: groupId,
-        inject: [KafkaConfigService, KafkaRegistryService],
-        useFactory: (
-          configService: KafkaConfigService,
-        ): ConsumerCreateInput => {
-          const conf = configService.composeConsumerConfig(config);
-          KafkaRegistryService.addConsumerGroup(groupId, conf);
-          return conf;
-        },
-      }));
-
-    return {
-      module: KafkaModule,
-      providers,
-    };
+    return KafkaConsumersModule.register(input);
   }
 }

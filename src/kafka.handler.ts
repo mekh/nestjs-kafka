@@ -13,10 +13,12 @@ export class KafkaHandler {
   public static create(
     provider: Provider,
     methodName: string,
+    consumer: KafkaConsumer,
   ): KafkaHandler {
     return new KafkaHandler(
       provider,
       methodName,
+      consumer,
     );
   }
 
@@ -25,6 +27,7 @@ export class KafkaHandler {
   constructor(
     public readonly provider: Provider,
     public readonly methodName: string,
+    public readonly consumer: KafkaConsumer,
   ) {}
 
   get providerName(): string {
@@ -35,39 +38,35 @@ export class KafkaHandler {
     return `${this.providerName}.${this.methodName}`;
   }
 
-  public async handle(
-    payload: EachBatchPayload,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
+  public async handle(payload: EachBatchPayload): Promise<void> {
     const { topic, partition } = payload.batch;
     this.logger.debug('consuming batch - %s:%d', topic, partition);
 
     const batch = KafkaBatch.create(
       payload,
-      (offset) => this.createAckFn(payload, consumer, offset),
+      (offset) => this.createAckFn(payload, offset),
     );
 
-    return consumer.batch
-      ? this.handleBatch(batch, consumer)
-      : this.handleEachMessage(batch, consumer);
+    return this.consumer.batch
+      ? this.handleBatch(batch)
+      : this.handleEachMessage(batch);
   }
 
   private createAckFn(
     payload: EachBatchPayload,
-    consumer: KafkaConsumer,
     offset: string,
   ) {
     return async (): Promise<void> => {
       const { topic, partition } = payload.batch;
       payload.resolveOffset(offset);
-      if (consumer.autoCommit) {
+      if (this.consumer.autoCommit) {
         this.logger.debug('auto-commit (%s) - %s:%d', offset, topic, partition);
 
         return payload.commitOffsetsIfNecessary();
       }
 
       this.logger.debug('commit (%s) - %s:%d', offset, topic, partition);
-      await consumer.commitOffset({
+      await this.consumer.commitOffset({
         topic,
         partition,
         offset: (Number(offset) + 1).toString(),
@@ -75,10 +74,7 @@ export class KafkaHandler {
     };
   }
 
-  private async handleEachMessage(
-    batch: KafkaBatch,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
+  private async handleEachMessage(batch: KafkaBatch): Promise<void> {
     const { topic, partition } = batch;
     this.logger.debug('handling each message - %s:%d', topic, partition);
     for (const message of batch) {
@@ -89,29 +85,26 @@ export class KafkaHandler {
 
       await this.execute(message);
 
-      if (consumer.autoCommit) {
+      if (this.consumer.autoCommit) {
         await message.ack();
       }
 
       await message.heartbeat();
 
-      if (consumer.isPaused(batch.topic, batch.partition)) {
+      if (this.consumer.isPaused(batch.topic, batch.partition)) {
         this.logger.debug('consuming is paused - %s:%d', topic, partition);
         break;
       }
     }
   }
 
-  private async handleBatch(
-    batch: KafkaBatch,
-    consumer: KafkaConsumer,
-  ): Promise<void> {
+  private async handleBatch(batch: KafkaBatch): Promise<void> {
     const { topic, partition } = batch;
     this.logger.debug('handling batch - %s:%d', topic, partition);
 
     await this.execute(batch);
 
-    if (consumer.autoCommit) {
+    if (this.consumer.autoCommit) {
       await batch.ack();
     }
   }

@@ -16,14 +16,14 @@ export interface ConsumerCreateInput {
 }
 
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
-type BatchHandler = (
-  consumer: KafkaConsumer,
-  payload: EachBatchPayload,
-) => Promise<void>;
+type BatchHandler = (payload: EachBatchPayload) => Promise<void>;
 
 export class KafkaConsumer {
-  public static create(config: ConsumerCreateInput): KafkaConsumer {
-    return new KafkaConsumer(config);
+  public static create(
+    config: ConsumerCreateInput,
+    cb: BatchHandler,
+  ): KafkaConsumer {
+    return new KafkaConsumer(config, cb);
   }
 
   private readonly logger = new Logger(KafkaConsumer.name);
@@ -35,7 +35,10 @@ export class KafkaConsumer {
     fromEnd: new Set<string>(),
   };
 
-  constructor(private readonly config: ConsumerCreateInput) {}
+  constructor(
+    private readonly config: ConsumerCreateInput,
+    private readonly cb: BatchHandler,
+  ) {}
 
   public get consumer(): Consumer {
     if (!this.kafkaConsumer) {
@@ -101,10 +104,10 @@ export class KafkaConsumer {
       });
   }
 
-  public async run(handle: BatchHandler): Promise<void> {
+  public async run(): Promise<void> {
     await this.consumer.run({
       ...this.runConfig,
-      eachBatch: handle.bind(handle, this),
+      eachBatch: this.cb.bind(this.cb),
     });
 
     this.logger.log('Kafka consumer - started (%s)', this.groupId);
