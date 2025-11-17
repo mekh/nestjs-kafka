@@ -6,7 +6,6 @@ import { EachBatchPayload } from 'kafkajs';
 import { KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.decorators';
 import { KafkaHandler } from './kafka.handler';
-
 import { KafkaConsumerDecoratorConfig } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
