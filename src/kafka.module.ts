@@ -1,16 +1,22 @@
-import { DynamicModule, Logger, Module } from '@nestjs/common';
+import { DynamicModule, Logger, Module, Provider } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaConfigService } from './kafka-config.service';
+import { KafkaModuleConfig } from './kafka-module.config';
 import { KafkaRegistryService } from './kafka-registry.service';
-import { KafkaDefaultConfig } from './kafka.config';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
+import { ConsumerCreateInput } from './kafka.consumer';
 import {
   KafkaAsyncConfig,
   KafkaConfig as IKafkaConfig,
+  KafkaConsumerConfig,
 } from './kafka.interfaces';
 import { KafkaService } from './kafka.service';
+
+type FeatureConfig = Omit<KafkaConsumerConfig, 'fromBeginning'>;
+type Feature = string;
+type ForFeature = FeatureConfig | FeatureConfig[] | Feature | Feature[];
 
 const providers = [
   KafkaAdminService,
@@ -31,7 +37,7 @@ const toExport = [
     {
       provide: KAFKA_CONFIG_TOKEN,
       useFactory: (): IKafkaConfig => {
-        const conf = KafkaDefaultConfig.getConfig();
+        const conf = KafkaModuleConfig.getConfig();
         const logger = new Logger('Kafka');
 
         return {
@@ -82,6 +88,38 @@ export class KafkaModule {
         ...providers,
       ],
       exports: toExport,
+    };
+  }
+
+  public static forFeature(input: ForFeature): DynamicModule {
+    const configMap = (Array.isArray(input) ? input : [input])
+      .reduce(
+        (acc, item) => {
+          const conf = typeof item === 'string'
+            ? { groupId: item }
+            : item;
+
+          return acc.set(conf.groupId, conf);
+        },
+        new Map<string, FeatureConfig>(),
+      );
+
+    const providers: Provider[] = [...configMap.entries()]
+      .map(([groupId, config]) => ({
+        provide: groupId,
+        inject: [KafkaConfigService, KafkaRegistryService],
+        useFactory: (
+          configService: KafkaConfigService,
+        ): ConsumerCreateInput => {
+          const conf = configService.composeConsumerConfig(config);
+          KafkaRegistryService.addConsumerGroup(groupId, conf);
+          return conf;
+        },
+      }));
+
+    return {
+      module: KafkaModule,
+      providers,
     };
   }
 }

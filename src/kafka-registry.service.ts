@@ -2,33 +2,39 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 
-import { KafkaConfigService } from './kafka-config.service';
-import { KafkaBatch } from './kafka.batch';
 import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.decorators';
+import { KafkaHandler } from './kafka.handler';
 
-import {
-  KafkaConsumerDecoratorConfig,
-  KafkaEachMessagePayload,
-} from './kafka.interfaces';
+import { KafkaConsumerDecoratorConfig } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type MaybeProvider = InstanceWrapper<object | undefined>;
 type Opts = KafkaConsumerDecoratorConfig;
-type ProviderMethod<T = any> = (data: T) => Promise<void> | void;
 
 @Injectable()
 export class KafkaRegistryService implements OnModuleInit {
+  private static readonly consumerGroups = new Map<
+    string,
+    ConsumerCreateInput
+  >();
+
+  public static addConsumerGroup(
+    groupId: string,
+    config: ConsumerCreateInput,
+  ): void {
+    this.consumerGroups.set(groupId, config);
+  }
+
   private readonly logger = new Logger(KafkaRegistryService.name);
 
-  private readonly topics = new Set<string>();
+  public readonly consumers = new Map<string, KafkaConsumer>();
 
-  private readonly consumers: KafkaConsumer[] = [];
+  public readonly handlers = new Map<string, KafkaHandler[]>();
 
   constructor(
     private readonly discoveryService: DiscoveryService,
     private readonly metadataScanner: MetadataScanner,
-    private readonly configService: KafkaConfigService,
   ) {}
 
   onModuleInit(): void {
@@ -36,11 +42,15 @@ export class KafkaRegistryService implements OnModuleInit {
   }
 
   public getTopics(): string[] {
-    return Array.from(this.topics.values());
+    return Array.from(this.handlers.keys());
+  }
+
+  public getHandlers(topic: string): KafkaHandler[] | undefined {
+    return this.handlers.get(topic);
   }
 
   public getConsumers(): KafkaConsumer[] {
-    return this.consumers;
+    return [...this.consumers.values()];
   }
 
   private scanAndRegister(): void {
@@ -76,8 +86,16 @@ export class KafkaRegistryService implements OnModuleInit {
       return;
     }
 
-    const config = this.configService.composeConsumerConfig(meta);
-    this.registerConsumer(config, provider, method);
+    const config = KafkaRegistryService.consumerGroups.get(meta.groupId);
+    if (!config) {
+      throw new Error(`Consumer group ${meta.groupId} is not registered`);
+    }
+
+    this.registerConsumer(config, meta, provider, method);
+
+    meta.topics.forEach((topic) =>
+      this.registerHandler(topic, provider, method)
+    );
   }
 
   private getMeta(provider: Provider, method: string): Opts | undefined {
@@ -90,33 +108,42 @@ export class KafkaRegistryService implements OnModuleInit {
 
   private registerConsumer(
     config: ConsumerCreateInput,
+    subscription: KafkaConsumerDecoratorConfig,
     provider: Provider,
     methodName: string,
   ): void {
-    const { topics } = config.subscriptionConfig;
-    const cb = this.createCb(provider, methodName);
-    const consumer = KafkaConsumer.create(config, cb);
-
-    topics.forEach((topic) => this.topics.add(topic));
+    const { groupId } = config.consumerConfig;
+    const consumer = this.consumers.get(groupId) ??
+      KafkaConsumer.create(config);
+    consumer.addSubscription(subscription);
 
     const consumerName = provider.instance.constructor.name;
     const handlerName = [consumerName, methodName].join('.');
     this.logger.log(
       'Kafka registry - registered consumer %s for topics %s',
       handlerName,
-      topics.join(', '),
+      subscription.topics.join(', '),
     );
 
-    this.consumers.push(consumer);
+    this.consumers.set(groupId, consumer);
   }
 
-  private createCb(
+  private registerHandler(
+    topic: string,
     provider: Provider,
     methodName: string,
-  ): ProviderMethod<KafkaEachMessagePayload | KafkaBatch> {
-    const method = methodName as keyof typeof provider.instance;
-    const cb: ProviderMethod = provider.instance[method];
+  ): void {
+    const handlers = this.handlers.get(topic) ?? [];
+    const handler = KafkaHandler.create(provider, methodName);
 
-    return cb.bind(provider.instance);
+    handlers.push(handler);
+
+    this.logger.log(
+      'Kafka registry - registered handler %s for topic %s',
+      handler.handlerName,
+      topic,
+    );
+
+    this.handlers.set(topic, handlers);
   }
 }

@@ -9,7 +9,6 @@ import {
 } from './kafka.constants';
 import {
   Headers as IHeaders,
-  KafkaConsumerConfig,
   KafkaConsumerDecoratorConfig,
   KafkaEachMessagePayload,
   Key as IKey,
@@ -62,8 +61,9 @@ export const Key = (): ParameterDecorator =>
   createParamDecorator(KAFKA_KEY_META);
 
 export const KafkaConsumer = (
+  groupId: string,
   topic: string | string[],
-  config?: KafkaConsumerConfig,
+  config?: { fromBeginning?: boolean },
 ): MethodDecorator => {
   const topics = (Array.isArray(topic) ? topic : [topic]).filter(Boolean);
 
@@ -113,7 +113,7 @@ export const KafkaConsumer = (
       return origFn.apply(this, args) as unknown;
     };
 
-    applyDecorators(ConsumerDecorator({ topics, ...config }))(
+    applyDecorators(ConsumerDecorator({ groupId, topics, ...config }))(
       target,
       key,
       descriptor,
@@ -122,8 +122,3 @@ export const KafkaConsumer = (
     copyMeta(origFn, descriptor.value as Function);
   };
 };
-
-export const KafkaBatchConsumer = (
-  topic: string | string[],
-  config?: Omit<KafkaConsumerConfig, 'batch'>,
-): MethodDecorator => KafkaConsumer(topic, { ...config, batch: true });

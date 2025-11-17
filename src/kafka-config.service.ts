@@ -6,29 +6,25 @@ import {
   ConsumerConfig,
   KafkaConfig,
   KafkaConsumerConfig,
-  KafkaConsumerDecoratorConfig,
   RunConfig,
-  SubscriptionConfig,
 } from './kafka.interfaces';
 
 @Injectable()
 export class KafkaConfigService {
   private readonly logger = new Logger(KafkaConfigService.name);
 
-  private readonly defaultConsumerConfig?: KafkaConsumerConfig;
+  private readonly defaultConsumerConfig?: Omit<KafkaConsumerConfig, 'groupId'>;
 
   constructor(@Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig) {
     this.defaultConsumerConfig = config.consumer;
   }
 
   public composeConsumerConfig(
-    flatConfig: KafkaConsumerDecoratorConfig,
+    flatConfig: KafkaConsumerConfig,
   ): ConsumerCreateInput {
     const {
-      topics,
       batch = true,
       autoCommit = true,
-      fromBeginning = false,
       autoCommitInterval = null,
       autoCommitThreshold = null,
       partitionsConsumedConcurrently = 1,
@@ -44,11 +40,6 @@ export class KafkaConfigService {
       partitionsConsumedConcurrently,
     };
 
-    const subConfig: SubscriptionConfig = {
-      topics,
-      fromBeginning,
-    };
-
     const consumer = {
       ...this.defaultConsumerConfig,
       ...consumerConfig,
@@ -60,7 +51,6 @@ export class KafkaConfigService {
 
     return {
       consumerConfig: consumer,
-      subscriptionConfig: subConfig,
       runConfig,
     };
   }
