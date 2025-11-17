@@ -1,17 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { DiscoveryService, MetadataScanner } from '@nestjs/core';
+import { DiscoveryService, MetadataScanner, ModuleRef } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { EachBatchPayload } from 'kafkajs';
 
-import { KafkaConfigService } from './kafka-config.service';
-import { ConsumerCreateInput, KafkaConsumer } from './kafka.consumer';
+import { KafkaConsumer } from './kafka.consumer';
 import { ConsumerDecorator } from './kafka.decorators';
 import { KafkaHandler } from './kafka.handler';
 
-import {
-  KafkaConsumerConfig,
-  KafkaConsumerDecoratorConfig,
-} from './kafka.interfaces';
+import { KafkaConsumerDecoratorConfig } from './kafka.interfaces';
 
 type Provider = InstanceWrapper<object>;
 type MaybeProvider = InstanceWrapper<object | undefined>;
@@ -19,18 +15,6 @@ type Opts = KafkaConsumerDecoratorConfig;
 
 @Injectable()
 export class KafkaRegistryService implements OnModuleInit {
-  private static readonly consumerGroups = new Map<
-    string,
-    Omit<KafkaConsumerConfig, 'fromBeginning'>
-  >();
-
-  public static addConsumerGroup(
-    groupId: string,
-    config: Omit<KafkaConsumerConfig, 'fromBeginning'>,
-  ): void {
-    this.consumerGroups.set(groupId, config);
-  }
-
   private readonly logger = new Logger(KafkaRegistryService.name);
 
   public readonly consumers = new Map<string, KafkaConsumer>();
@@ -38,9 +22,9 @@ export class KafkaRegistryService implements OnModuleInit {
   public readonly handlers = new Map<string, KafkaHandler[]>();
 
   constructor(
-    private readonly configService: KafkaConfigService,
     private readonly discoveryService: DiscoveryService,
     private readonly metadataScanner: MetadataScanner,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   onModuleInit(): void {
@@ -92,13 +76,15 @@ export class KafkaRegistryService implements OnModuleInit {
       return;
     }
 
-    const config = KafkaRegistryService.consumerGroups.get(meta.groupId);
-    if (!config) {
-      throw new Error(`Consumer group ${meta.groupId} is not registered`);
-    }
-
-    const conf = this.configService.composeConsumerConfig(config);
-    const consumer = this.registerConsumer(conf, meta, provider, method);
+    const consumer = this.registerConsumer(meta.groupId);
+    consumer.addSubscription(meta);
+    const consumerName = provider.instance.constructor.name;
+    const handlerName = [consumerName, method].join('.');
+    this.logger.log(
+      'Kafka registry - registered consumer %s for topics %s',
+      handlerName,
+      meta.topics.join(', '),
+    );
 
     meta.topics.forEach((topic) =>
       this.registerHandler(topic, provider, method, consumer)
@@ -113,24 +99,10 @@ export class KafkaRegistryService implements OnModuleInit {
     );
   }
 
-  private registerConsumer(
-    config: ConsumerCreateInput,
-    subscription: KafkaConsumerDecoratorConfig,
-    provider: Provider,
-    methodName: string,
-  ): KafkaConsumer {
-    const { groupId } = config.consumerConfig;
-    const consumer = this.consumers.get(groupId) ??
-      KafkaConsumer.create(config, this.handle.bind(this));
-    consumer.addSubscription(subscription);
-
-    const consumerName = provider.instance.constructor.name;
-    const handlerName = [consumerName, methodName].join('.');
-    this.logger.log(
-      'Kafka registry - registered consumer %s for topics %s',
-      handlerName,
-      subscription.topics.join(', '),
-    );
+  private registerConsumer(groupId: string): KafkaConsumer {
+    const consumer = this.moduleRef.get<KafkaConsumer>(groupId, {
+      strict: false,
+    });
 
     this.consumers.set(groupId, consumer);
 
@@ -157,7 +129,7 @@ export class KafkaRegistryService implements OnModuleInit {
     this.handlers.set(topic, handlers);
   }
 
-  protected async handle(payload: EachBatchPayload): Promise<void> {
+  public async handle(payload: EachBatchPayload): Promise<void> {
     const handlers = this.getHandlers(payload.batch.topic);
     if (!handlers?.length) {
       return;

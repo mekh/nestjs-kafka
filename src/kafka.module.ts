@@ -1,4 +1,4 @@
-import { DynamicModule, Logger, Module } from '@nestjs/common';
+import { DynamicModule, Global, Logger, Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
@@ -30,8 +30,11 @@ const toExport = [
   KafkaAdminService,
   KafkaRegistryService,
   KafkaService,
+  KafkaConfigService,
+  KAFKA_CONFIG_TOKEN,
 ];
 
+@Global()
 @Module({
   imports: [DiscoveryModule],
   providers: [
