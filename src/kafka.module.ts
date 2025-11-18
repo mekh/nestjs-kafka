@@ -1,5 +1,11 @@
-import { DynamicModule, Global, Logger, Module } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import {
+  DynamicModule,
+  Global,
+  Logger,
+  Module,
+  OnApplicationShutdown,
+} from '@nestjs/common';
+import { DiscoveryModule, ModuleRef } from '@nestjs/core';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaConfigService } from './kafka-config.service';
@@ -15,9 +21,13 @@ import {
 } from './kafka.interfaces';
 import { KafkaService } from './kafka.service';
 
-type FeatureConfig = Omit<KafkaConsumerConfig, 'fromBeginning'>;
-type Feature = string;
-type ForFeature = FeatureConfig | FeatureConfig[] | Feature | Feature[];
+type ConsumerGroupConfig = Omit<KafkaConsumerConfig, 'fromBeginning'>;
+type ConsumerGroup = string;
+type RegisterConsumerInput =
+  | ConsumerGroupConfig
+  | ConsumerGroupConfig[]
+  | ConsumerGroup
+  | ConsumerGroup[];
 
 const providers = [
   KafkaAdminService,
@@ -56,7 +66,7 @@ const toExport = [
   ],
   exports: toExport,
 })
-export class KafkaModule {
+export class KafkaModule implements OnApplicationShutdown {
   public static forRoot(config: IKafkaConfig): DynamicModule {
     return {
       module: KafkaModule,
@@ -95,7 +105,23 @@ export class KafkaModule {
     };
   }
 
-  public static forFeature(input: ForFeature): DynamicModule {
+  public static registerConsumer(input: RegisterConsumerInput): DynamicModule {
     return KafkaConsumersModule.register(input);
+  }
+
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    if (!['SIGTERM', 'SIGINT'].includes(signal ?? '')) {
+      return;
+    }
+
+    const svc = this.moduleRef.get<KafkaService>(KafkaService);
+
+    try {
+      await svc.disconnect();
+    } catch {
+      //
+    }
   }
 }
