@@ -2,20 +2,18 @@ import { EachBatchPayload } from 'kafkajs';
 import {
   Headers,
   KafkaBatch,
-  KafkaBatchConsumer,
   KafkaBatchPayload,
   KafkaConsumer,
   KafkaEachMessagePayload,
   Key,
   Value,
 } from '../src';
-import { KafkaSerde } from '../src/kafka-serde';
 
 describe('Decorators: KafkaConsumer parameter injection', () => {
   it('should map @Value, @Key, @Headers and pass full payload to undecorated params (single message mode)', async () => {
     class TestSvc {
       // return received args for assertion
-      @KafkaConsumer('topic-1', { groupId: 'g1' })
+      @KafkaConsumer('g1', 'topic-1')
       handle(
         @Value() value: any,
         @Key() key: string | undefined,
@@ -54,9 +52,9 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
     expect(res.payload).toBe(payload);
   });
 
-  it('should map arrays for @Value, @Key, @Headers in batch mode via KafkaConsumer(..., { batch: true })', async () => {
+  it('should map arrays for @Value, @Key, @Headers in batch mode (using KafkaBatch payload)', async () => {
     class BatchSvc1 {
-      @KafkaConsumer('topic-batch', { groupId: 'g1', batch: true })
+      @KafkaConsumer('g1', 'topic-batch')
       handle(
         @Value() values: any[],
         @Key() keys: (string | undefined)[],
@@ -106,11 +104,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
       isStale: () => false,
       pause: () => undefined as any,
     } as any;
-    const batch = new KafkaBatch(
-      batchPayload,
-      new KafkaSerde(),
-      jest.fn,
-    );
+    const batch = KafkaBatch.create(batchPayload, () => async () => undefined);
 
     const res = (svc as any).handle(batch);
 
@@ -120,9 +114,9 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
     expect(res.payload).toBe(batch);
   });
 
-  it('should behave the same with @KafkaBatchConsumer shortcut decorator', async () => {
+  it('should work with another batch payload too', async () => {
     class BatchSvc2 {
-      @KafkaBatchConsumer('topic-batch-2', { groupId: 'g2' })
+      @KafkaConsumer('g2', 'topic-batch-2')
       handle(@Value() values: any[], @Key() keys: (string | undefined)[]) {
         return { values, keys };
       }
@@ -141,11 +135,7 @@ describe('Decorators: KafkaConsumer parameter injection', () => {
       },
     } as any;
 
-    const batch = new KafkaBatch(
-      payload,
-      new KafkaSerde(),
-      jest.fn,
-    );
+    const batch = KafkaBatch.create(payload as any, () => async () => undefined);
 
     const res = (svc as any).handle(batch);
     expect(res.values).toEqual([{ a: 1 }, { a: 2 }]);

@@ -1,6 +1,4 @@
-import { KafkaConfigService } from '../src/kafka-config.service';
 import { KafkaRegistryService } from '../src/kafka-registry.service';
-import { KafkaSerde } from '../src/kafka-serde';
 import { ConsumerDecorator } from '../src/kafka.decorators';
 
 class InstanceWrapper<T extends object> {
@@ -9,11 +7,6 @@ class InstanceWrapper<T extends object> {
 
 describe('KafkaRegistryService scanning and config precedence', () => {
   it('should register consumers and handlers with decorator-level overrides and batch flag', () => {
-    const defaultConfig: any = {
-      brokers: ['b:1'],
-      consumer: { groupId: 'g-default', sessionTimeout: 1000 },
-    };
-
     class TestProvider {
       handle(_: any) {}
     }
@@ -42,26 +35,38 @@ describe('KafkaRegistryService scanning and config precedence', () => {
       getAllMethodNames: jest.fn(() => ['handle']),
     };
 
-    const serde = new KafkaSerde();
-    const configService = new KafkaConfigService(defaultConfig);
+    const consumerMock = {
+      addSubscription: jest.fn(),
+    } as any;
+
+    const moduleRef: any = {
+      get: jest.fn(() => consumerMock),
+    };
 
     const registry = new KafkaRegistryService(
-      serde,
-      discoveryService,
-      metadataScanner,
-      configService,
+      discoveryService as any,
+      metadataScanner as any,
+      moduleRef as any,
     );
 
     registry.onModuleInit();
 
     const consumers = registry.getConsumers();
     expect(consumers).toHaveLength(1);
-    const consumer = consumers[0];
+    // moduleRef returned our consumer instance
+    expect(moduleRef.get).toHaveBeenCalledWith('g-override', { strict: false });
+    // ensure subscription added using decorator metadata
+    expect(consumerMock.addSubscription).toHaveBeenCalledWith({
+      topics: ['topic-x'],
+      groupId: 'g-override',
+      autoCommit: false,
+      fromBeginning: true,
+      batch: true,
+    });
 
-    expect(consumer.groupId).toBe('g-override');
-    expect(consumer.batch).toBe(true);
-    expect(consumer.autoCommit).toBe(false);
-    expect(consumer.subscriptionConfig.fromBeginning).toBe(true);
-    expect(consumer.subscriptionConfig.topics).toEqual(['topic-x']);
+    // handlers were registered for the topic
+    const handlers = registry.getHandlers('topic-x');
+    expect(handlers).toBeDefined();
+    expect(handlers?.length).toBe(1);
   });
 });

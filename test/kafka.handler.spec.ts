@@ -1,5 +1,4 @@
 import { EachBatchPayload, Offsets } from 'kafkajs';
-import { KafkaSerde } from '../src/kafka-serde';
 import { KafkaHandler } from '../src/kafka.handler';
 
 describe('KafkaHandler', () => {
@@ -14,23 +13,21 @@ describe('KafkaHandler', () => {
   }
 
   const providerWrapper: any = { instance: new TestProvider() };
-  const serde = new KafkaSerde();
+  const consumer: any = {
+    autoCommit: false,
+    commitOffset: jest.fn(async () => undefined),
+    isPaused: jest.fn(() => false),
+  };
 
   it('should expose provider and handler names', () => {
-    const h = KafkaHandler.create(
-      { groupId: 'g' },
-      providerWrapper,
-      'foo',
-      serde,
-    );
+    const h = KafkaHandler.create(providerWrapper as any, 'foo', consumer);
 
     expect(h.providerName).toBe('TestProvider');
     expect(h.handlerName).toBe('TestProvider.foo');
   });
 
   it('should call provider handler with deserialized message and ack', async () => {
-    const handler = KafkaHandler
-      .create({ groupId: 'g' }, providerWrapper, 'foo', serde);
+    const handler = KafkaHandler.create(providerWrapper as any, 'foo', consumer);
 
     const payload: EachBatchPayload = {
       batch: {
@@ -59,13 +56,7 @@ describe('KafkaHandler', () => {
       pause: () => () => {},
       heartbeat(): any {},
     };
-    const consumer: any = {
-      autoCommit: false,
-      commitOffset: jest.fn(async () => undefined),
-      isPaused: jest.fn(() => false),
-    };
-
-    await handler.handle(payload, consumer);
+    await handler.handle(payload);
 
     expect(providerWrapper.instance.calls.length).toBe(1);
     const callArg = providerWrapper.instance.calls[0];
