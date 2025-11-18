@@ -10,8 +10,6 @@ export class KafkaModuleConfig {
 
   public readonly clientId = this.asString('KAFKA_CLIENT_ID');
 
-  public readonly groupId = this.asString('KAFKA_GROUP_ID');
-
   public readonly retryCount = this.asNumber('KAFKA_RETRY_COUNT');
 
   public readonly retryDelay = this.asNumber('KAFKA_RETRY_DELAY');
