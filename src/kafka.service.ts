@@ -1,12 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EachBatchPayload, Kafka, Producer, RecordMetadata } from 'kafkajs';
+import { Kafka, Producer, RecordMetadata } from 'kafkajs';
 
 import { KafkaAdminService } from './kafka-admin.service';
 import { KafkaRegistryService } from './kafka-registry.service';
-import { KafkaSerdeService } from './kafka-serde.service';
+import { KafkaSerde } from './kafka-serde';
 import { KAFKA_CONFIG_TOKEN } from './kafka.constants';
-import { KafkaConsumer } from './kafka.consumer';
-import { KafkaConfig, KafkaSendInput, KafkaSerde } from './kafka.interfaces';
+import { KafkaConfig, KafkaSendInput } from './kafka.interfaces';
 
 @Injectable()
 export class KafkaService {
@@ -16,14 +15,14 @@ export class KafkaService {
 
   protected readonly producer: Producer;
 
-  protected consumers: KafkaConsumer[] = [];
+  private readonly serde: KafkaSerde;
 
   constructor(
     @Inject(KAFKA_CONFIG_TOKEN) config: KafkaConfig,
-    @Inject(KafkaSerdeService) private readonly serde: KafkaSerde,
     public readonly registry: KafkaRegistryService,
     public readonly admin: KafkaAdminService,
   ) {
+    this.serde = new KafkaSerde();
     this.kafka = new Kafka(config);
     this.producer = this.kafka.producer();
   }
@@ -42,9 +41,7 @@ export class KafkaService {
 
       await consumer.connect();
       await consumer.subscribe();
-      await consumer.run(this.handle.bind(this));
-
-      this.consumers.push(consumer);
+      await consumer.run();
     }
 
     this.logger.log('Kafka - initialization completed');
@@ -53,10 +50,10 @@ export class KafkaService {
   public async disconnect(): Promise<void> {
     await this.producer.disconnect();
     await Promise.allSettled(
-      this.consumers.map((consumer) => consumer.disconnect()),
+      this.registry
+        .getConsumers()
+        .map((consumer) => consumer.disconnect()),
     );
-
-    this.consumers = [];
   }
 
   public async send(data: KafkaSendInput): Promise<RecordMetadata[]> {
@@ -70,19 +67,5 @@ export class KafkaService {
 
   public async ensureTopics(topic: string | string[]): Promise<void> {
     await this.admin.ensureTopics(topic);
-  }
-
-  protected async handle(
-    consumer: KafkaConsumer,
-    payload: EachBatchPayload,
-  ): Promise<void> {
-    const handlers = this.registry.getHandlers(payload.batch.topic);
-    if (!handlers?.length) {
-      return;
-    }
-
-    await Promise.allSettled(
-      handlers.map((handler) => handler.handle(payload, consumer)),
-    );
   }
 }

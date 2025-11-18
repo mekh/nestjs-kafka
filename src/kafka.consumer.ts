@@ -3,40 +3,42 @@ import {
   Consumer,
   ConsumerConfig,
   ConsumerRunConfig,
-  ConsumerSubscribeTopics,
   EachBatchPayload,
   Kafka,
   TopicPartitionOffsetAndMetadata,
 } from 'kafkajs';
 
-import { RunConfig, SubscriptionConfig } from './kafka.interfaces';
+import { KafkaSubscriptionConfig, RunConfig } from './kafka.interfaces';
 
 export interface ConsumerCreateInput {
   consumerConfig: ConsumerConfig;
-  subscriptionConfig: SubscriptionConfig;
   runConfig: Required<RunConfig>;
 }
 
 type CommitOffsetsData = TopicPartitionOffsetAndMetadata;
-type BatchHandler = (
-  consumer: KafkaConsumer,
-  payload: EachBatchPayload,
-) => Promise<void>;
+type BatchHandler = (payload: EachBatchPayload) => Promise<void>;
 
 export class KafkaConsumer {
-  public static create(input: ConsumerCreateInput): KafkaConsumer {
-    return new KafkaConsumer(input);
+  public static create(
+    config: ConsumerCreateInput,
+    cb: BatchHandler,
+  ): KafkaConsumer {
+    return new KafkaConsumer(config, cb);
   }
 
-  protected readonly logger = new Logger(KafkaConsumer.name);
+  private readonly logger = new Logger(KafkaConsumer.name);
 
   private kafkaConsumer?: Consumer;
 
-  private topicsSet: Set<string>;
+  private subConfig = {
+    fromBeginning: new Set<string>(),
+    fromEnd: new Set<string>(),
+  };
 
-  constructor(private readonly input: ConsumerCreateInput) {
-    this.topicsSet = new Set(input.subscriptionConfig.topics);
-  }
+  constructor(
+    private readonly config: ConsumerCreateInput,
+    private readonly cb: BatchHandler,
+  ) {}
 
   public get consumer(): Consumer {
     if (!this.kafkaConsumer) {
@@ -47,36 +49,33 @@ export class KafkaConsumer {
   }
 
   public get groupId(): string {
-    return this.input.consumerConfig.groupId;
-  }
-
-  public get subscriptionConfig(): ConsumerSubscribeTopics {
-    return {
-      topics: [...this.topicsSet.values()],
-      fromBeginning: this.input.subscriptionConfig.fromBeginning,
-    };
+    return this.config.consumerConfig.groupId;
   }
 
   public get consumerConfig(): ConsumerConfig {
-    return this.input.consumerConfig;
+    return this.config.consumerConfig;
   }
 
   public get runConfig(): ConsumerRunConfig {
-    const { batch, ...runConfig } = this.input.runConfig;
+    const { batch, ...runConfig } = this.config.runConfig;
 
     return runConfig;
   }
 
   public get batch(): boolean {
-    return this.input.runConfig.batch;
+    return this.config.runConfig.batch;
   }
 
   public get autoCommit(): boolean {
-    return this.input.runConfig.autoCommit;
+    return this.config.runConfig.autoCommit;
   }
 
-  public addTopics(topics: string[]): void {
-    topics.forEach((topic) => this.topicsSet.add(topic));
+  public addSubscription(opts: KafkaSubscriptionConfig): void {
+    const set = opts.fromBeginning
+      ? this.subConfig.fromBeginning
+      : this.subConfig.fromEnd;
+
+    opts.topics.forEach((topic) => set.add(topic));
   }
 
   public createConsumer(kafka: Kafka): Consumer {
@@ -105,23 +104,36 @@ export class KafkaConsumer {
       });
   }
 
-  public async run(handle: BatchHandler): Promise<void> {
+  public async run(): Promise<void> {
     await this.consumer.run({
       ...this.runConfig,
-      eachBatch: handle.bind(handle, this),
+      eachBatch: this.cb.bind(this.cb),
     });
 
     this.logger.log('Kafka consumer - started (%s)', this.groupId);
   }
 
   public async subscribe(): Promise<void> {
-    const config = this.subscriptionConfig;
-    await this.consumer.subscribe(config);
+    const fromBeginning = Array.from(this.subConfig.fromBeginning);
+    const fromEnd = Array.from(this.subConfig.fromEnd);
+    if (fromBeginning.length) {
+      await this.consumer.subscribe({
+        topics: fromBeginning,
+        fromBeginning: true,
+      });
+    }
+
+    if (fromEnd.length) {
+      await this.consumer.subscribe({
+        topics: fromEnd,
+        fromBeginning: false,
+      });
+    }
 
     this.logger.log(
       'Kafka consumer - subscribed to topics (%s): %s',
       this.groupId,
-      config.topics.join(','),
+      [...fromBeginning, ...fromEnd].join(','),
     );
   }
 

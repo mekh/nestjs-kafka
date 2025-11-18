@@ -1,8 +1,8 @@
 import { KafkaMessage as IKafkaMessage } from 'kafkajs';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
+import { KafkaSerde } from '../src/kafka-serde';
 
 describe('KafkaSerdeService normalization helpers', () => {
-  const serde = new KafkaSerdeService();
+  const serde = new KafkaSerde();
 
   it('deserializeMessage should coerce key/headers to string and parse value', () => {
     const msg: IKafkaMessage = {

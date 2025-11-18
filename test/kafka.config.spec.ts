@@ -1,7 +1,7 @@
-import { KafkaDefaultConfig } from '../src';
+import { KafkaModuleConfig } from '../src';
 import { KafkaLogLevel } from '../src/kafka.enums';
 
-describe('KafkaDefaultConfig', () => {
+describe('KafkaModuleConfig', () => {
   const OLD_ENV = process.env;
 
   beforeEach(() => {
@@ -15,7 +15,6 @@ describe('KafkaDefaultConfig', () => {
   it('should map envs to config correctly', () => {
     process.env.KAFKA_BROKER = 'a:1,b:2';
     process.env.KAFKA_CLIENT_ID = 'cid';
-    process.env.KAFKA_GROUP_ID = 'gid';
     process.env.KAFKA_RETRY_COUNT = '5';
     process.env.KAFKA_RETRY_DELAY = '1000';
     process.env.KAFKA_RETRY_TIMEOUT = '5000';
@@ -25,14 +24,14 @@ describe('KafkaDefaultConfig', () => {
     process.env.KAFKA_TOPIC_AUTO_CREATE = 'true';
     process.env.KAFKA_LOG_LEVEL = 'debug';
 
-    const conf = new KafkaDefaultConfig().getConfig();
+    const conf = new KafkaModuleConfig().getConfig();
 
     expect(conf.brokers).toEqual(['a:1', 'b:2']);
     expect(conf.clientId).toBe('cid');
-    expect(conf.consumer?.groupId).toBe('gid');
     expect(conf.retry?.retries).toBe(5);
     expect(conf.retry?.initialRetryTime).toBe(1000);
     expect(conf.retry?.maxRetryTime).toBe(5000);
+    // factor and multiplier may be undefined unless set
     expect(conf.enforceRequestTimeout).toBe(true);
     expect(conf.connectionTimeout).toBe(2000);
     expect(conf.requestTimeout).toBe(3000);
@@ -44,7 +43,7 @@ describe('KafkaDefaultConfig', () => {
     delete process.env.KAFKA_BROKER;
     delete process.env.KAFKA_LOG_LEVEL;
 
-    const defaults = KafkaDefaultConfig.getConfig();
+    const defaults = KafkaModuleConfig.getConfig();
 
     expect(defaults.brokers).toEqual(['localhost:9092']);
     expect(defaults.logLevel).toBe(KafkaLogLevel.ERROR);
@@ -52,7 +51,7 @@ describe('KafkaDefaultConfig', () => {
   });
 
   it('should map known levels and ignore unknown levels', () => {
-    const cfg = new KafkaDefaultConfig();
+    const cfg = new KafkaModuleConfig();
 
     expect((cfg as any).getLogLevel('nothing')).toBe(
       KafkaLogLevel.NOTHING,
@@ -68,7 +67,7 @@ describe('KafkaDefaultConfig', () => {
     process.env.KAFKA_TOPIC_AUTO_CREATE = 'false';
     process.env.KAFKA_BROKER = '';
 
-    const conf = new KafkaDefaultConfig();
+    const conf = new KafkaModuleConfig();
 
     expect((conf as any).asBoolean('KAFKA_TOPIC_AUTO_CREATE')).toBe(false);
     expect((conf as any).asArray('KAFKA_BROKER')).toBeUndefined();

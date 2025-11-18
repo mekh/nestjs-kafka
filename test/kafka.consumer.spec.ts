@@ -15,8 +15,14 @@ describe('KafkaConsumer', () => {
 
   const input = {
     consumerConfig: { groupId: 'g1' },
-    subscriptionConfig: { topics: ['t1'], fromBeginning: true },
-    runConfig: { autoCommit: false, batch: false, eachBatchAutoResolve: false },
+    runConfig: {
+      autoCommit: false,
+      batch: false,
+      eachBatchAutoResolve: false,
+      partitionsConsumedConcurrently: 1,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+    },
   } as any;
 
   beforeEach(() => {
@@ -24,20 +30,18 @@ describe('KafkaConsumer', () => {
   });
 
   it('should expose properties and manage topics', () => {
-    const c = KafkaConsumer.create(input);
+    const c = KafkaConsumer.create(input, async () => undefined);
 
     expect(c.groupId).toBe('g1');
-    expect(c.subscriptionConfig.topics).toEqual(['t1']);
     expect(c.consumerConfig).toEqual({ groupId: 'g1' });
-    expect(c.subscriptionConfig.fromBeginning).toBe(true);
     expect(c.autoCommit).toBe(false);
 
-    c.addTopics(['t2', 't1']);
-    expect(c.subscriptionConfig.topics.sort()).toEqual(['t1', 't2']);
+    // add subscriptions and they will be used on subscribe()
+    c.addSubscription({ topics: ['t1', 't2'], fromBeginning: true });
   });
 
   it('should require created consumer before using it', async () => {
-    const c = KafkaConsumer.create(input);
+    const c = KafkaConsumer.create(input, async () => undefined);
 
     expect(() => c.consumer).toThrow('Kafka consumer is not created');
 
@@ -46,12 +50,13 @@ describe('KafkaConsumer', () => {
   });
 
   it('should connect, subscribe, run and commit', async () => {
-    const c = KafkaConsumer.create(input);
+    const c = KafkaConsumer.create(input, async () => undefined);
     c.createConsumer(kafka as any);
+    c.addSubscription({ topics: ['t1', 't2'], fromBeginning: true });
 
     await c.connect();
     await c.subscribe();
-    await c.run(async () => undefined);
+    await c.run();
 
     await c.commitOffset({
       topic: 't1',
@@ -62,7 +67,7 @@ describe('KafkaConsumer', () => {
 
     expect(fakeConsumer.connect).toHaveBeenCalled();
     expect(fakeConsumer.subscribe).toHaveBeenCalledWith({
-      topics: ['t1'],
+      topics: ['t1', 't2'],
       fromBeginning: true,
     });
     expect(fakeConsumer.run).toHaveBeenCalled();

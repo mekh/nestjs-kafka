@@ -1,7 +1,6 @@
 import { KafkaService } from '../src';
 import { KafkaAdminService } from '../src/kafka-admin.service';
 import { KafkaRegistryService } from '../src/kafka-registry.service';
-import { KafkaSerdeService } from '../src/kafka-serde.service';
 // @ts-ignore
 import { __setKafkaMock } from 'kafkajs';
 
@@ -44,7 +43,6 @@ describe('KafkaService', () => {
   } as any;
 
   const config: any = { brokers: ['b:1'] };
-  const serde = new KafkaSerdeService();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -55,7 +53,7 @@ describe('KafkaService', () => {
     const cons = makeConsumer();
     registry.getConsumers.mockReturnValue([cons as any]);
 
-    const s = new KafkaService(config, serde, registry, admin);
+    const s = new KafkaService(config as any, registry as any, admin as any);
 
     await s.connect();
 
@@ -73,7 +71,7 @@ describe('KafkaService', () => {
     const cons = makeConsumer();
     registry.getConsumers.mockReturnValue([cons as any]);
 
-    const s = new KafkaService(config, serde, registry, admin);
+    const s = new KafkaService(config as any, registry as any, admin as any);
     await s.connect();
 
     await s.disconnect();
@@ -83,7 +81,7 @@ describe('KafkaService', () => {
   });
 
   it('should send messages and ensure topics', async () => {
-    const s = new KafkaService(config, serde, registry, admin);
+    const s = new KafkaService(config as any, registry as any, admin as any);
 
     const res = await s.send({
       topic: 't',
@@ -93,9 +91,7 @@ describe('KafkaService', () => {
     expect(admin.ensureTopics).toHaveBeenCalledWith('t');
     expect(producer.send).toHaveBeenCalledWith({
       topic: 't',
-      messages: [
-        { key: 'k', value: JSON.stringify({ a: 1 }) },
-      ],
+      messages: [ { key: 'k', value: JSON.stringify({ a: 1 }) } ],
     });
     expect(res.length).toBe(1);
   });

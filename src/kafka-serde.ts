@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { IHeaders, KafkaMessage as IKafkaMessage, Message } from 'kafkajs';
 
 import {
@@ -6,22 +5,21 @@ import {
   KafkaMessage,
   KafkaSendInput,
   KafkaSendInputMessage,
-  KafkaSerde,
+  Value,
 } from './kafka.interfaces';
 
-@Injectable()
-export class KafkaSerdeService implements KafkaSerde {
+export class KafkaSerde<T extends Value = Value> {
   public serialize(data: KafkaSendInput): Message[] {
     return Array.isArray(data.messages)
       ? data.messages.map((msg) => this.serializeMessage(msg))
       : [this.serializeMessage(data.messages)];
   }
 
-  public deserialize(message: IKafkaMessage): KafkaMessage;
-  public deserialize(message: IKafkaMessage[]): KafkaMessage[];
+  public deserialize(message: IKafkaMessage): KafkaMessage<T>;
+  public deserialize(message: IKafkaMessage[]): KafkaMessage<T>[];
   public deserialize(
     message: IKafkaMessage | IKafkaMessage[],
-  ): KafkaMessage | KafkaMessage[] {
+  ): KafkaMessage<T> | KafkaMessage<T>[] {
     const isArray = Array.isArray(message);
     const data = isArray ? message : [message];
 
@@ -46,13 +44,13 @@ export class KafkaSerdeService implements KafkaSerde {
 
   protected parseMessage(
     value: Buffer | null,
-  ): Record<string, any> | undefined {
+  ): T | undefined {
     const str = value?.toString();
     if (!str) {
       return;
     }
 
-    let parsed: Record<string, any> | undefined;
+    let parsed: T | undefined;
     try {
       parsed = JSON.parse(str);
     } catch {

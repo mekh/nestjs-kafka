@@ -1,16 +1,14 @@
 import { KafkaLogLevel } from './kafka.enums';
 import { KafkaConfig } from './kafka.interfaces';
 
-export class KafkaDefaultConfig {
+export class KafkaModuleConfig {
   public static getConfig(): KafkaConfig {
-    return new KafkaDefaultConfig().getConfig();
+    return new KafkaModuleConfig().getConfig();
   }
 
   public readonly brokers = this.asArray('KAFKA_BROKER') ?? ['localhost:9092'];
 
   public readonly clientId = this.asString('KAFKA_CLIENT_ID');
-
-  public readonly groupId = this.asString('KAFKA_GROUP_ID');
 
   public readonly retryCount = this.asNumber('KAFKA_RETRY_COUNT');
 
@@ -86,7 +84,6 @@ export class KafkaDefaultConfig {
         retries: this.retryCount,
       },
       consumer: {
-        groupId: this.groupId,
         metadataMaxAge: this.metadataMaxAge,
         sessionTimeout: this.sessionTimeout,
         rebalanceTimeout: this.rebalanceTimeout,

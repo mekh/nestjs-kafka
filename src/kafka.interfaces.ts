@@ -59,7 +59,7 @@ export interface KafkaBatchPayload<
 export interface KafkaConfig extends IKafkaConfig {
   logLevel?: KafkaLogLevel;
   topicAutoCreate?: boolean;
-  consumer?: KafkaConsumerConfig;
+  consumer?: Omit<KafkaConsumerConfig, 'groupId'>;
 }
 
 export interface KafkaAsyncConfig
@@ -74,7 +74,7 @@ export interface KafkaConsumerConfig extends Omit<ConsumerConfig, 'groupId'> {
    * Default consumer group id. Can be defined per-decorator.
    * The group id must be either defined on module level or per-decorator.
    */
-  groupId?: string;
+  groupId: string;
   /**
    * If true, the consumer group will use the latest committed offset
    * when starting to fetch messages.
@@ -142,11 +142,13 @@ export interface KafkaConsumerConfig extends Omit<ConsumerConfig, 'groupId'> {
   batch?: boolean;
 }
 
-export interface KafkaConsumerDecoratorConfig extends KafkaConsumerConfig {
+export interface KafkaConsumerDecoratorConfig {
+  groupId: string;
   topics: string[];
+  fromBeginning?: boolean;
 }
 
-export type SubscriptionConfig = Pick<
+export type KafkaSubscriptionConfig = Pick<
   KafkaConsumerDecoratorConfig,
   | 'topics'
   | 'fromBeginning'
@@ -154,7 +156,7 @@ export type SubscriptionConfig = Pick<
 
 export type RunConfig =
   & Pick<
-    KafkaConsumerDecoratorConfig,
+    KafkaConsumerConfig,
     | 'autoCommit'
     | 'autoCommitInterval'
     | 'autoCommitThreshold'
